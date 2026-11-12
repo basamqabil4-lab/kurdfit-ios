@@ -1,0 +1,55 @@
+{
+  "name": "calorie_tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "build:desktop": "electron-builder --win",
+    "start:desktop": "electron ."
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
+    "@google/genai": "^2.17.1",
+    "firebase": "^12.18.0",
+    "lucide-react": "^1.33.0",
+    "next": "14.2.35",
+    "next-pwa": "^5.6.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "electron-serve": "^3.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.35"
+  },
+  "main": "main.js",
+  "build": {
+    "appId": "com.kurdfit.app",
+    "productName": "Kurd Fit",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon-512x512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true
+    },
+    "files": [
+      "main.js",
+      "out/**/*"
+    ]
+  }
+}

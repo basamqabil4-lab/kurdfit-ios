@@ -1,0 +1,22 @@
+{
+  "name": "Kurd Fit",
+  "short_name": "KurdFit",
+  "description": "باشترین ئەپی لەشجوانی و تەندروستی بۆ کوردان",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F19",
+  "theme_color": "#9333EA",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

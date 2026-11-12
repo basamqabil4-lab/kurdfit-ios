@@ -1,0 +1,55 @@
+name: Build iOS App (.ipa)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Compile Kurd Fit iOS (.ipa) on macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build static web bundle & sync Capacitor iOS
+        run: |
+          if [ -d "app/api" ]; then mv app/api _api_backup; fi
+          npx next build
+          if [ -d "_api_backup" ]; then mv _api_backup app/api; fi
+          npx cap sync ios
+
+      - name: Build unsigned iOS Archive with Xcode
+        run: |
+          cd ios/App
+          xcodebuild -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Package .app into KurdFit-iOS.ipa
+        run: |
+          mkdir -p Payload
+          cp -r ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -r KurdFit-iOS.ipa Payload
+
+      - name: Upload KurdFit-iOS.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KurdFit-iOS-IPA
+          path: KurdFit-iOS.ipa
