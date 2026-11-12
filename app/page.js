@@ -36,8 +36,22 @@ const getCustomApiKey = () => {
   return null;
 };
 
-const CANDIDATE_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3.8-flash'];
-const SCAN_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3.8-flash'];
+const CANDIDATE_GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-3.6-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-flash-lite-latest',
+  'gemini-3.8-flash'
+];
+const SCAN_GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-3.6-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest'
+];
 
 const cleanJsonText = (str) => {
   if (!str) return '{}';
@@ -56,41 +70,15 @@ const cleanJsonText = (str) => {
 
 if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemInstruction = null, base64Image = null, customModels = null) => {
   const customApiKey = getCustomApiKey();
-  const isCapacitorMobile = Boolean(
-    window.Capacitor?.isNativePlatform?.() ||
-    window.location?.protocol === 'capacitor:' ||
-    window.location?.protocol === 'file:' ||
-    (window.location?.hostname === 'localhost' && !window.location?.port)
-  );
-
-  // 1. ئەگەر لەسەر وێب بوو (نەک APKی مۆبایل)، سەرەتا لە ڕێگەی سێرڤەر پرۆکسییەوە (/api/gemini) هەوڵ دەدەین
-  if (!isCapacitorMobile) {
-    try {
-      const res = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          systemInstruction,
-          base64Image,
-          customModels: customModels || CANDIDATE_GEMINI_MODELS,
-          customApiKey
-        })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.text) return json.text;
-      }
-    } catch (proxyErr) {
-      // ئەگەر لە دۆخی مۆبایلی ئەندرۆید بێت و سێرڤەر ئامادە نەبێت، دەچێتە سەر فۆڵباکی ڕاستەوخۆ
-    }
-  }
-
-  // 2. Direct Fallback بۆ ئەپڵیکەیشنی مۆبایل (iOS IPA & Android APK) لە کاتی نەبوونی سێرڤەری Node.js
   const fallbackKey = customApiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ['AQ.Ab8', 'RN6JF1', 'VmBY6o', 'CeNqpZ', 'tmhY8n', 'eBIKnm', 'z-HIOx', 'syH2Sb', 'uVHJA'].join('');
   const modelsToTry = customModels || CANDIDATE_GEMINI_MODELS;
-  let lastError = null;
-  for (const model of modelsToTry) {
+
+  const callSingleModel = async (model, staggerMs = 0) => {
+    if (staggerMs > 0) {
+      await new Promise(r => setTimeout(r, staggerMs));
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 22000);
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${fallbackKey}`;
       const parts = [{ text: prompt }];
@@ -102,17 +90,65 @@ if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemI
       if (systemInstruction) {
         body.systemInstruction = { parts: [{ text: systemInstruction }] };
       }
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
       const json = await res.json();
-      if (json.error) throw new Error(json.error.message);
-      if (json.candidates && json.candidates[0] && json.candidates[0].content) {
-        return json.candidates[0].content.parts[0].text;
+      if (json.error) throw new Error(json.error.message || `Error from ${model}`);
+      const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text && text.trim()) return text;
+      throw new Error(`Empty response from ${model}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  // Wave 1: Race the fastest 3 models concurrently (hedged by 450ms) so any single 503 never blocks
+  const wave1Models = modelsToTry.slice(0, 3);
+  try {
+    return await Promise.any(wave1Models.map((m, idx) => callSingleModel(m, idx * 450)));
+  } catch {}
+
+  // Wave 2: Race remaining Gemini models concurrently
+  const wave2Models = modelsToTry.slice(3);
+  if (wave2Models.length > 0) {
+    try {
+      return await Promise.any(wave2Models.map((m, idx) => callSingleModel(m, idx * 400)));
+    } catch {}
+  }
+
+  // Wave 3: Cloud AI Backup if all Google Gemini endpoints return 503 simultaneously (for text requests)
+  if (!base64Image) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const messages = [];
+      if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+      messages.push({ role: 'user', content: prompt });
+      const backupRes = await fetch('https://text.pollinations.ai/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'openai',
+          messages,
+          response_format: { type: 'json_object' }
+        }),
+        signal: controller.signal
+      });
+      if (backupRes.ok) {
+        const backupJson = await backupRes.json();
+        const backupText = backupJson?.choices?.[0]?.message?.content;
+        if (backupText && backupText.trim()) return backupText;
       }
-    } catch (err) {
-      lastError = err;
+    } catch {} finally {
+      clearTimeout(timer);
     }
   }
-  throw lastError || new Error("Failed to call Gemini API");
+
+  throw new Error("Failed to connect to AI server");
 };
 
 if (typeof window !== "undefined") window.analyzeFoodDirectly = async (base64Image, query) => {
@@ -1431,15 +1467,18 @@ export default function App() {
         const savedCourse = localStorage.getItem('app_workout_course');
         if (savedCourse) {
           const parsed = JSON.parse(savedCourse);
-          if (parsed && Array.isArray(parsed.weeklyPlan)) {
+          if (parsed && Array.isArray(parsed.weeklyPlan) && parsed.isAiOnlineGenerated === true) {
             const loc = parsed.trainingLocation || parsed.location || profile.trainingLocation || 'gym';
             const eq = parsed.homeEquipment || profile.homeEquipment || '';
             const sanitized = sanitizeWorkoutPlan(parsed, loc, eq);
+            sanitized.isAiOnlineGenerated = true;
             setWorkoutCourse(sanitized);
             try {
               localStorage.setItem('app_workout_course', JSON.stringify(sanitized));
               cacheWorkoutPlanMedia(sanitized.weeklyPlan);
             } catch (cErr) {}
+          } else {
+            localStorage.removeItem('app_workout_course');
           }
         }
         const savedHistory = localStorage.getItem('app_course_history');
@@ -1940,11 +1979,13 @@ export default function App() {
       ...calculated
     };
     setProfile(updated);
-    const autoGen = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-    setWorkoutCourse(autoGen);
   };
 
   const generateAiDietProgram = async (dietType) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      alert(currentLangConfig.code === 'en' ? 'Please connect to the internet to generate an AI nutrition plan.' : 'تکایە سەرەتا پەیوەندی بە ئینتەرنێتەوە بکە بۆ داڕشتنی خشتەی خۆراک بە زیرەکی دەستکرد.');
+      return;
+    }
     setIsGeneratingDiet(true);
     setAiDietStep('generating');
     
@@ -1966,67 +2007,9 @@ export default function App() {
       }
     } catch (error) {
       console.error(error);
-      
-      // Fallback to static mock if API fails
-      const baseGoalCals = profile.goalCalories || 2200;
-      const newWeeklyPlan = Array(7).fill(null).map((_, dayIndex) => {
-        let breakfast = [];
-        let lunch = [];
-        let snack = [];
-        let dinner = [];
-        
-        const workoutDaysCount = profile.availableDaysPerWeek || 4;
-        const isRestDay = dayIndex >= workoutDaysCount; 
-        
-        let dailyCals = baseGoalCals;
-        if (isRestDay) {
-            dailyCals = Math.round(dailyCals * 0.9);
-        } else {
-            dailyCals = Math.round(dailyCals * 1.05);
-        }
-        
-        const getMealTarget = (percent) => (dailyCals * percent);
-        const findFood = (id) => masterFoodList.find(f => f.id === id) || masterFoodList[0];
-        
-        const addScaledFood = (foodId, targetCalories) => {
-          const food = findFood(foodId);
-          const multiplier = targetCalories / food.baseCalories;
-          return {
-            id: Date.now() + Math.random(),
-            name: food.name,
-            englishName: food.englishName,
-            calories: Math.round(food.baseCalories * multiplier),
-            protein: Math.round(food.baseProtein * multiplier),
-            carbs: Math.round(food.baseCarbs * multiplier),
-            fat: Math.round(food.baseFat * multiplier),
-            icon: '🍽️',
-            amount: Math.round(100 * multiplier),
-            unit: 'گرام'
-          };
-        };
-
-        if (dietType === 'keto') {
-          breakfast.push(addScaledFood('f2', getMealTarget(0.25)));
-          breakfast.push(addScaledFood('f12', getMealTarget(0.10)));
-          lunch.push(addScaledFood('f6', getMealTarget(0.30)));
-          snack.push(addScaledFood('f12', getMealTarget(0.10)));
-          dinner.push(addScaledFood('f5', getMealTarget(0.25)));
-        } else {
-          breakfast.push(addScaledFood('f2', getMealTarget(0.15)));
-          breakfast.push(addScaledFood('f4', getMealTarget(0.15)));
-          lunch.push(addScaledFood('f1', getMealTarget(0.25)));
-          lunch.push(addScaledFood('f3', getMealTarget(0.15)));
-          snack.push(addScaledFood('f9', getMealTarget(0.10)));
-          dinner.push(addScaledFood('f5', getMealTarget(0.20)));
-        }
-
-        return { breakfast, lunch, snack, dinner };
-      });
-      
-      setDietMeals(newWeeklyPlan);
-      setNutritionSubView('meals');
-      setAiDietStep('prompt'); 
+      setAiDietStep('select');
       setIsGeneratingDiet(false);
+      alert(currentLangConfig.code === 'en' ? 'Could not connect to AI server. Please check your internet connection and try again.' : 'کێشەیەک لە هێڵی ئینتەرنێت ڕوویدا. تکایە دڵنیابەرەوە لە پەیوەندی ئینتەرنێتەکەت و دووبارە هەوڵبدەرەوە.');
     }
   };
   // پێشنیارکردنی زیرەکانەی ئامانج بە سیستەمی پێشکەوتوو لە مۆداڵ (AI Goal Suggestion Engine)
@@ -2111,6 +2094,11 @@ export default function App() {
   };
 
   const handleGenerateCustomCourse = async (daysCount) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      alert(currentLangConfig.code === 'en' ? 'Internet connection is required to design a personalized AI workout course.' : 'تکایە سەرەتا پەیوەندی بە ئینتەرنێتەوە بکە. داڕشتنی هەر کۆرسێک تەنها بە بوونی ئینتەرنێت و لە ڕێگەی زیرەکی دەستکردەوە (AI) ئەنجام دەدرێت.');
+      return;
+    }
+
     setIsGeneratingAiCourse(true);
     const count = daysCount || builderDaysCount || (workoutCourse?.daysPerWeek || 0) || profile.availableDaysPerWeek || 4;
     const base = {
@@ -2130,52 +2118,29 @@ export default function App() {
     const eq = loc === 'home' ? (homeEquipment || '') : '';
 
     try {
-      let generated = null;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("AI_TIMEOUT")), 45000)
+      );
 
-      // 1. هەوڵدان بۆ بەرهەمهێنان بە ماوەی سنووردارکراوی ١٥ چرکە بۆ ئەوەی بەپێی زانیاری یاریزان دابنرێت
-      try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), 15000)
-        );
+      const onlineGenerationPromise = async () => {
+        if (typeof window !== "undefined" && typeof window.generateWorkoutDirectly === "function") {
+          return await window.generateWorkoutDirectly(updated, count, loc, eq, language);
+        }
+        throw new Error("AI generator unavailable");
+      };
 
-        const onlineGenerationPromise = async () => {
-          if (typeof window !== "undefined" && typeof window.generateWorkoutDirectly === "function") {
-            try {
-              return await window.generateWorkoutDirectly(updated, count, loc, eq, language);
-            } catch (e) {}
-          }
-          try {
-            const res = await fetch('/api/generate-workout', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ profile: updated, location: loc, equipment: eq, language })
-            });
-            if (res.ok) {
-              const apiData = await res.json();
-              if (apiData && Array.isArray(apiData.weeklyPlan) && apiData.weeklyPlan.length === 7) {
-                return apiData;
-              }
-            }
-          } catch (e) {}
-          return null;
-        };
+      const generated = await Promise.race([onlineGenerationPromise(), timeoutPromise]);
 
-        generated = await Promise.race([onlineGenerationPromise(), timeoutPromise]);
-      } catch (raceErr) {
-        console.info("Fast scientific generator fallback triggered:", raceErr?.message || raceErr);
-      }
-
-      // 2. ئەگەر بەرهەمهێنانی ئۆنلاین کاتی برد یان سێرڤەر ئامادە نەبوو، دەستبەجێ بە ٠.٠١ چرکە کۆرسەکە دادەنێت
       if (!generated || !Array.isArray(generated.weeklyPlan) || generated.weeklyPlan.length !== 7) {
-        generated = generateAiScientificProgram(updated, count, loc, eq);
+        throw new Error("Invalid AI course response");
       }
 
       const cleanCourse = sanitizeWorkoutPlan(generated, loc, eq);
+      cleanCourse.isAiOnlineGenerated = true;
       setCourseHistory(prev => [cleanCourse, ...prev]);
       setWorkoutCourse(cleanCourse);
       setProfile(updated);
 
-      // دابەزاندن و ئۆفلاینکردنی خۆکاری وێنەکانی کۆرسەکە لە پاشبنەمادا بە شێوازی نا-بلۆککەر
       if (cleanCourse && cleanCourse.weeklyPlan) {
         setTimeout(() => {
           try {
@@ -2192,30 +2157,16 @@ export default function App() {
       setSelectedDayIdx(getTodayDayIdx());
       setCompletedDayIndices([getTodayDayIdx()]);
       setShowNewCourseModal(false);
+      playSparkleSound();
     } catch (err) {
-      console.error("AI Workout course generation fallback triggered:", err);
-      const generated = generateAiScientificProgram(updated, count, loc, eq);
-      const cleanCourse = sanitizeWorkoutPlan(generated, loc, eq);
-      setCourseHistory(prev => [cleanCourse, ...prev]);
-      setWorkoutCourse(cleanCourse);
-      setProfile(updated);
-
-      // دابەزاندن و ئۆفلاینکردنی خۆکاری وێنەی سەرجەم ڕاهێنانەکانی کۆرسەکە لە پاشبنەمادا
-      if (cleanCourse && cleanCourse.weeklyPlan) {
-        cacheWorkoutPlanMedia(cleanCourse.weeklyPlan);
-      }
-      try {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('app_workout_course', JSON.stringify(cleanCourse));
-          localStorage.setItem('app_profile', JSON.stringify(updated));
-        }
-      } catch (e) {}
-      setSelectedDayIdx(getTodayDayIdx());
-      setCompletedDayIndices([getTodayDayIdx()]);
-      setShowNewCourseModal(false);
+      console.error("AI Workout course generation failed:", err);
+      alert(
+        currentLangConfig.code === 'en'
+          ? 'Could not design the course via AI. Please check your internet connection and try again.'
+          : 'نەتوانرا پەیوەندی بە زیرەکی دەستکردەوە بکرێت بۆ داڕشتنی کۆرسەکەت. تکایە دڵنیابەرەوە لە هەبوونی هێڵی ئینتەرنێت و دووبارە هەوڵبدەرەوە.'
+      );
     } finally {
       setIsGeneratingAiCourse(false);
-      playSparkleSound();
     }
   };
 
@@ -2522,73 +2473,91 @@ export default function App() {
       actionType: action.type
     });
 
-    // ٣. دوای دوو چرکە کردارەکە جێبەجێ دەبێت
-    setTimeout(() => {
-      if (targetTab === 'home' && isWaterSection) {
-        const amount = Number(action.amount) || Number(action.waterMl) || 250;
-        handleAddWater(amount);
-      } else if (targetTab === 'workout' || isWorkoutSection) {
-        const days = action.days || (workoutCourse?.daysPerWeek || 0) || profile.availableDaysPerWeek || 4;
-        const base = { ...profile, availableDaysPerWeek: days };
-        const autoCalc = calculateScientificGoalByAi(base);
-        const updated = { ...base, ...autoCalc };
-        const generated = generateAiScientificProgram(updated, days, updated.trainingLocation || 'gym');
-        setWorkoutCourse(generated);
-        setProfile(updated);
-        setSelectedDayIdx(getTodayDayIdx());
-        setCompletedDayIndices([getTodayDayIdx()]);
-      } else if (targetTab === 'nutrition' || isNutritionSection) {
-        const mealType = action.mealType || 'lunch';
-        const foodItem = action.food;
-        if (foodItem) {
-          setDietMeals(prev => ({
-            ...prev,
-            [mealType]: [foodItem, ...(prev[mealType] || [])]
-          }));
-        }
-      } else if (targetTab === 'profile' || isProfileSection) {
-        if (action.type === 'CHANGE_GOAL' || action.goal || action.targetWeight) {
-          const base = {
-            ...profile,
-            targetWeight: action.targetWeight || profile.targetWeight,
-            targetDays: action.targetDays || profile.targetDays,
-            goal: action.goal || profile.goal
-          };
+    // ٣. جێبەجێکردنی کردارەکە (بۆ کۆرس لە ڕێگەی زیرەکی دەستکردی ئۆنلاینەوە)
+    setTimeout(async () => {
+      try {
+        if (targetTab === 'home' && isWaterSection) {
+          const amount = Number(action.amount) || Number(action.waterMl) || 250;
+          handleAddWater(amount);
+        } else if (targetTab === 'workout' || isWorkoutSection) {
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            alert(t('noInternetWorkoutAlert'));
+            setActionLoadingState({ active: false, message: '', actionType: '' });
+            return;
+          }
+          const days = action.days || (workoutCourse?.daysPerWeek || 0) || profile.availableDaysPerWeek || 4;
+          const base = { ...profile, availableDaysPerWeek: days };
           const autoCalc = calculateScientificGoalByAi(base);
           const updated = { ...base, ...autoCalc };
-          setProfile(updated);
-          const generated = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-          setWorkoutCourse(generated);
-        } else if (action.type === 'ADD_HEALTH_CONDITION' || action.condition) {
-          const cond = action.condition;
-          if (cond && !profile.healthConditions.includes(cond)) {
-            const updated = { ...profile, healthConditions: [...profile.healthConditions, cond] };
+          const generated = await window.generateWorkoutDirectly(
+            updated,
+            days,
+            updated.trainingLocation || 'gym',
+            updated.homeEquipment || '',
+            currentLangConfig?.code || 'ku'
+          );
+          if (generated && Array.isArray(generated.weeklyPlan) && generated.weeklyPlan.length === 7) {
+            generated.isAiOnlineGenerated = true;
+            setWorkoutCourse(generated);
             setProfile(updated);
-            const autoGen = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-            setWorkoutCourse(autoGen);
+            setSelectedDayIdx(getTodayDayIdx());
+            setCompletedDayIndices([getTodayDayIdx()]);
+          } else {
+            alert(t('noInternetWorkoutAlert'));
+            setActionLoadingState({ active: false, message: '', actionType: '' });
+            return;
+          }
+        } else if (targetTab === 'nutrition' || isNutritionSection) {
+          const mealType = action.mealType || 'lunch';
+          const foodItem = action.food;
+          if (foodItem) {
+            setDietMeals(prev => ({
+              ...prev,
+              [mealType]: [foodItem, ...(prev[mealType] || [])]
+            }));
+          }
+        } else if (targetTab === 'profile' || isProfileSection) {
+          if (action.type === 'CHANGE_GOAL' || action.goal || action.targetWeight) {
+            const base = {
+              ...profile,
+              targetWeight: action.targetWeight || profile.targetWeight,
+              targetDays: action.targetDays || profile.targetDays,
+              goal: action.goal || profile.goal
+            };
+            const autoCalc = calculateScientificGoalByAi(base);
+            const updated = { ...base, ...autoCalc };
+            setProfile(updated);
+          } else if (action.type === 'ADD_HEALTH_CONDITION' || action.condition) {
+            const cond = action.condition;
+            if (cond && !profile.healthConditions.includes(cond)) {
+              const updated = { ...profile, healthConditions: [...profile.healthConditions, cond] };
+              setProfile(updated);
+            }
           }
         }
+
+        // نیشانەکردنی فەرمانەکە وەک جێبەجێکراو لە چاتدا
+        setChatMessages(prev => prev.map(msg => {
+          if (msg.action && msg.action.id === action.id) {
+            return { ...msg, action: { ...msg.action, isApplied: true } };
+          }
+          return msg;
+        }));
+      } catch (err) {
+        console.error('AI action error:', err);
+        alert(t('noInternetWorkoutAlert'));
+      } finally {
+        // لادانی دۆخی لۆدینگ
+        setActionLoadingState({ active: false, message: '', actionType: '' });
+
+        // لێدانی ساوندی تەواوبوون
+        try {
+          if (typeof playWorkoutFinishedSound === 'function') {
+            playWorkoutFinishedSound();
+          }
+        } catch (e) {}
       }
-
-      // نیشانەکردنی فەرمانەکە وەک جێبەجێکراو لە چاتدا
-      setChatMessages(prev => prev.map(msg => {
-        if (msg.action && msg.action.id === action.id) {
-          return { ...msg, action: { ...msg.action, isApplied: true } };
-        }
-        return msg;
-      }));
-
-      // لادانی دۆخی لۆدینگ
-      setActionLoadingState({ active: false, message: '', actionType: '' });
-
-      // لێدانی ساوندی تەواوبوون
-      try {
-        if (typeof playWorkoutFinishedSound === 'function') {
-          playWorkoutFinishedSound();
-        }
-      } catch (e) {}
-
-    }, 2000);
+    }, 600);
   };
 
   // ژەمەکان (بە بەتاڵی دەستپێدەکات تا یاریزان خۆی خشتە دروست نەکات)
@@ -3477,8 +3446,6 @@ export default function App() {
     const autoCalc = calculateScientificGoalByAi(base);
     const updated = { ...base, ...autoCalc };
     setProfile(updated);
-    const autoGen = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-    setWorkoutCourse(autoGen);
     setShowEditProfileModal(false);
   };
 
@@ -3494,8 +3461,6 @@ export default function App() {
     const autoCalc = calculateScientificGoalByAi(base);
     const updated = { ...base, ...autoCalc };
     setProfile(updated);
-    const autoGen = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-    setWorkoutCourse(autoGen);
     setShowGoalModal(false);
   };
 
@@ -3505,8 +3470,6 @@ export default function App() {
     if (!profile.healthConditions.includes(val)) {
       const updated = { ...profile, healthConditions: [...profile.healthConditions, val] };
       setProfile(updated);
-      const autoGen = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-      setWorkoutCourse(autoGen);
       setNewConditionInput('');
     }
   };
@@ -3515,8 +3478,6 @@ export default function App() {
     playDeleteSound();
     const updated = { ...profile, healthConditions: profile.healthConditions.filter(c => c !== cond) };
     setProfile(updated);
-    const autoGen = generateAiScientificProgram(updated, (workoutCourse?.daysPerWeek || 0) || updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym');
-    setWorkoutCourse(autoGen);
   };
 
   // تابەکانی هێڵی خوارەوە - ئاراستە و ڕیزبەندی جێگیرە و ناگۆڕێت بە گۆڕینی زمان
@@ -4500,18 +4461,13 @@ export default function App() {
                       };
                       const autoCalc = calculateScientificGoalByAi(base);
                       const updated = { ...base, ...autoCalc, goalSugar: 35 };
-                      const initialProgram = sanitizeWorkoutPlan(
-                        generateAiScientificProgram(updated, updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym', updated.homeEquipment || ''),
-                        updated.trainingLocation || 'gym',
-                        updated.homeEquipment || ''
-                      );
                       setProfile(updated);
-                      setWorkoutCourse(initialProgram);
+                      setWorkoutCourse(null);
                       const emptyDiet = Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
                       setDietMeals(emptyDiet);
                       try {
                         localStorage.setItem('app_profile', JSON.stringify(updated));
-                        localStorage.setItem('app_workout_course', JSON.stringify(initialProgram));
+                        localStorage.removeItem('app_workout_course');
                         localStorage.setItem('app_diet_meals', JSON.stringify(emptyDiet));
                       } catch (e) {}
                       setHasCompletedOnboarding(true);
@@ -5465,6 +5421,16 @@ export default function App() {
           </div>
 
 
+
+          {/* ڕوونکردنەوەی زیرەکی دەستکرد لەسەر چۆنیەتی داڕشتنی کۆرسەکە */}
+          {workoutCourse?.rationale && (
+            <div className="liquid-card" style={{ padding: '12px 14px', marginBottom: '14px', border: '1px solid rgba(168, 85, 247, 0.35)', background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%)', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <Sparkles size={18} color="#a855f7" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: '12px', lineHeight: '1.6', color: 'var(--text-main)', fontWeight: '700' }}>
+                {workoutCourse.rationale}
+              </div>
+            </div>
+          )}
 
           {/* ڕۆژەکانی هەفتە */}
           <div style={{ marginBottom: '20px' }}>
@@ -10655,8 +10621,9 @@ export default function App() {
           transform: 'translateX(-50%)', 
           width: '100%', 
           maxWidth: '480px', 
-          height: 'calc(64px + env(safe-area-inset-bottom, 8px))', 
-          paddingBottom: 'env(safe-area-inset-bottom, 8px)',
+          height: 'calc(64px + max(env(safe-area-inset-bottom, 0px), 30px))', 
+          paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 30px)',
+          alignItems: 'flex-start',
           background: 'transparent',
           border: 'none',
           borderTop: 'none',
@@ -10676,7 +10643,7 @@ export default function App() {
             top: 0, 
             left: 0, 
             width: '100%', 
-            height: '100%', 
+            height: '66px', 
             zIndex: 0, 
             pointerEvents: 'none',
             overflow: 'visible'
@@ -10698,6 +10665,18 @@ export default function App() {
             style={{ transition: 'd 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
           />
         </svg>
+
+        {/* پڕکەرەوەی سەیف-زۆنی ژێر دوگمەکان تا لەسەر ئایفۆن دوگمەکان بەرز ببنەوە */}
+        <div style={{
+          position: 'absolute',
+          top: '63px',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'var(--bottom-nav-bg)',
+          zIndex: 0,
+          pointerEvents: 'none'
+        }} />
 
         {/* دوگمەکانی تابەکان */}
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', width: '100%', height: '64px', justifyContent: 'space-around', alignItems: 'center', direction: 'ltr' }}>

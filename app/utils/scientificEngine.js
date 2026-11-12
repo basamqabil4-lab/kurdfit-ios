@@ -250,11 +250,20 @@ Exactly ${days} days must have isRestDay: false (each with 4-5 tailored exercise
 RESPOND ONLY WITH PURE JSON. NO MARKDOWN.`;
 
    const resText = await window.callGeminiAPI(prompt);
-   const parsed = JSON.parse(cleanJsonText(resText));
+   const cleaned = cleanJsonText(resText);
+   let parsed = null;
+   try {
+     parsed = JSON.parse(cleaned);
+   } catch {
+     parsed = JSON.parse(cleaned.replace(/[\r\n]+/g, ' '));
+   }
    if (parsed && Array.isArray(parsed.weeklyPlan) && parsed.weeklyPlan.length === 7) {
      parsed.trainingLocation = location;
      parsed.homeEquipment = equipment;
-     return sanitizeWorkoutPlan(parsed, location, equipment);
+     parsed.isAiOnlineGenerated = true;
+     const sanitized = sanitizeWorkoutPlan(parsed, location, equipment);
+     sanitized.isAiOnlineGenerated = true;
+     return sanitized;
    }
    throw new Error("Invalid format from AI");
 };
@@ -280,7 +289,23 @@ ${historyText ? `Recent chat:\n${historyText}\n` : ''}User says: "${query}"
 Return ONLY a valid JSON object (no markdown):
 {"reply": "your helpful motivating reply in ${langName}", "thought": "brief scientific reasoning in ${langName}", "suggestedReplies": ["short follow-up 1 in ${langName}", "short follow-up 2 in ${langName}"], "action": null}`;
    const resText = await window.callGeminiAPI(prompt);
-   return JSON.parse(cleanJsonText(resText));
+   const cleaned = cleanJsonText(resText);
+   try {
+     const parsed = JSON.parse(cleaned);
+     if (parsed && parsed.reply) return parsed;
+   } catch {
+     try {
+       const parsed2 = JSON.parse(cleaned.replace(/[\r\n]+/g, ' '));
+       if (parsed2 && parsed2.reply) return parsed2;
+     } catch {}
+   }
+   const replyMatch = String(resText || '').match(/"reply"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"|\s*\})/);
+   return {
+     reply: replyMatch ? replyMatch[1] : String(resText || '').replace(/```json|```/gi, '').trim(),
+     thought: '',
+     suggestedReplies: [],
+     action: null
+   };
 };
 
 

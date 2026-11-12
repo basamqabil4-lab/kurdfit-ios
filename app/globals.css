@@ -73,6 +73,9 @@ body.light-theme,
   padding: 0;
   font-family: inherit;
   text-shadow: none ;
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 html, body {
@@ -81,6 +84,9 @@ html, body {
   width: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   background-color: var(--bg-color);
   background-image: var(--bg-gradient);
   color: var(--text-main);
@@ -121,7 +127,7 @@ html, body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  padding-bottom: calc(82px + env(safe-area-inset-bottom, 10px));
+  padding-bottom: calc(104px + max(env(safe-area-inset-bottom, 0px), 30px));
   position: relative;
   z-index: 1;
 }
@@ -293,6 +299,7 @@ button:focus-visible {
 }
 
 input, select, textarea {
+  font-size: 16px !important;
   background: var(--card-subtle) ;
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -356,7 +363,7 @@ select option {
 
 
 
-/* Bottom Navigation Glass Container - Locked to Bottom */
+/* Bottom Navigation Glass Container - Locked to Bottom & Raised Above Home Indicator */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -364,12 +371,12 @@ select option {
   transform: translateX(-50%);
   width: 100%;
   max-width: 480px;
-  height: calc(64px + env(safe-area-inset-bottom, 8px));
-  padding-bottom: env(safe-area-inset-bottom, 8px);
+  height: calc(64px + max(env(safe-area-inset-bottom, 0px), 30px));
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 30px);
   background-color: transparent ;
   display: flex;
   justify-content: space-around;
-  align-items: center;
+  align-items: flex-start;
   border: none ;
   border-top: none ;
   z-index: 2000;
