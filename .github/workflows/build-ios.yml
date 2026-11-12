@@ -22,12 +22,11 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build static web bundle & sync Capacitor iOS
+      - name: Build static web bundle & copy to Capacitor iOS
         run: |
-          if [ -d "app/api" ]; then mv app/api _api_backup; fi
+          rm -rf app/api
           npx next build
-          if [ -d "_api_backup" ]; then mv _api_backup app/api; fi
-          npx cap sync ios
+          npx cap copy ios
 
       - name: Build unsigned iOS Archive with Xcode
         run: |
@@ -40,13 +39,14 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             clean build
 
       - name: Package .app into KurdFit-iOS.ipa
         run: |
           mkdir -p Payload
-          cp -r ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
-          zip -r KurdFit-iOS.ipa Payload
+          cp -R ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry KurdFit-iOS.ipa Payload
 
       - name: Upload KurdFit-iOS.ipa Artifact
         uses: actions/upload-artifact@v4
