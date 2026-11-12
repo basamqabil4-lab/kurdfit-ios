@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Calorify AI Tracker',
-  description: 'AI powered calorie tracker with Dark Glassmorphism UI',
+  title: 'BQ GYM',
+  description: 'BQ GYM - Smart Fitness & Nutrition Coach',
 }
 
 export default function RootLayout({ children }) {
@@ -14,7 +14,7 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Calorify AI" />
+        <meta name="apple-mobile-web-app-title" content="BQ GYM" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#030014" />
         <meta httpEquiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' https: data:; connect-src 'self' https: data:;" />

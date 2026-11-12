@@ -42,14 +42,17 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             clean build
 
-      - name: Package .app into KurdFit-iOS.ipa
+      - name: Package .app into BQ-GYM-iOS.ipa
         run: |
           mkdir -p Payload
           cp -R ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
-          zip -qry KurdFit-iOS.ipa Payload
+          zip -qry BQ-GYM-iOS.ipa Payload
+          cp BQ-GYM-iOS.ipa KurdFit-iOS.ipa
 
-      - name: Upload KurdFit-iOS.ipa Artifact
+      - name: Upload BQ-GYM-iOS.ipa Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KurdFit-iOS-IPA
-          path: KurdFit-iOS.ipa
+          name: BQ-GYM-iOS-IPA
+          path: |
+            BQ-GYM-iOS.ipa
+            KurdFit-iOS.ipa

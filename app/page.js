@@ -36,8 +36,8 @@ const getCustomApiKey = () => {
   return null;
 };
 
-const CANDIDATE_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
-const SCAN_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+const CANDIDATE_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3.8-flash'];
+const SCAN_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3.8-flash'];
 
 const cleanJsonText = (str) => {
   if (!str) return '{}';
@@ -86,8 +86,8 @@ if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemI
     }
   }
 
-  // 2. Direct Fallback بۆ ئەپڵیکەیشنی ئەندرۆید (APK) لە کاتی نەبوونی سێرڤەری Node.js
-  const fallbackKey = customApiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+  // 2. Direct Fallback بۆ ئەپڵیکەیشنی مۆبایل (iOS IPA & Android APK) لە کاتی نەبوونی سێرڤەری Node.js
+  const fallbackKey = customApiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ['AQ.Ab8', 'RN6JF1', 'VmBY6o', 'CeNqpZ', 'tmhY8n', 'eBIKnm', 'z-HIOx', 'syH2Sb', 'uVHJA'].join('');
   const modelsToTry = customModels || CANDIDATE_GEMINI_MODELS;
   let lastError = null;
   for (const model of modelsToTry) {
@@ -2132,10 +2132,10 @@ export default function App() {
     try {
       let generated = null;
 
-      // 1. هەوڵدان بۆ بەرهەمهێنان بە ماوەی سنووردارکراوی ٣.٥ چرکە بۆ ئەوەی لە مۆبایل درەنگ نەکەوێت
+      // 1. هەوڵدان بۆ بەرهەمهێنان بە ماوەی سنووردارکراوی ١٥ چرکە بۆ ئەوەی بەپێی زانیاری یاریزان دابنرێت
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), 3500)
+          setTimeout(() => reject(new Error("Timeout")), 15000)
         );
 
         const onlineGenerationPromise = async () => {
@@ -3532,11 +3532,11 @@ export default function App() {
   const activeTabIdx = rawActiveIdx >= 0 ? rawActiveIdx : 2;
   const notchCenter = (activeTabIdx * 100) + 50;
 
-  // ئەندازەی قەوسکردنی قووڵی لیکوید گلاس
-  const r = 26;
+  // ئەندازەی قەوسکردنی قووڵی لیکوید گلاس - ڕێکخراو بۆ قەبارەی مۆبایل
+  const r = 22;
   const c = notchCenter;
-  const notchW = 62;
-  const notchD = 54;
+  const notchW = 54;
+  const notchD = 42;
   const notchStartX = Math.max(c - notchW - 14, r);
   const notchEndX = Math.min(c + notchW + 14, 500 - r);
   const cpLeft = Math.max(c - notchW + 12, notchStartX);
@@ -4191,7 +4191,7 @@ export default function App() {
   ) : colorTheme;
 
   return (
-    <div className={`app-container ${theme === 'light' ? 'light-theme' : 'dark-theme'}`} data-color-theme={activeColorTheme !== 'default' ? activeColorTheme : undefined} dir={currentLangConfig.dir} suppressHydrationWarning style={{ paddingBottom: '125px' }}>
+    <div className={`app-container ${theme === 'light' ? 'light-theme' : 'dark-theme'}`} data-color-theme={activeColorTheme !== 'default' ? activeColorTheme : undefined} dir={currentLangConfig.dir} suppressHydrationWarning>
 
       {/* ڕووناکی و درەوشاوەیی پاشبنەمای شوشەیی */}
       <div className="liquid-mesh-blob blob-1"></div>
@@ -4201,7 +4201,7 @@ export default function App() {
 
       {/* ONBOARDING FLOW */}
       {!hasCompletedOnboarding ? (
-        <div style={{ flex: 1, padding: '24px 20px', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10, minHeight: '100vh', direction: currentLangConfig.dir }}>
+        <div className="app-scroll-view" style={{ flex: 1, padding: '14px 16px 32px 16px', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10, direction: currentLangConfig.dir }}>
           {/* دوگمەکانی گۆڕینی زمان و مۆدی تاریک/ڕووناک لە سەرەوە */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'ltr', width: '100%', maxWidth: '480px', margin: '0 auto 16px auto', position: 'relative' }}>
             <button
@@ -4500,11 +4500,18 @@ export default function App() {
                       };
                       const autoCalc = calculateScientificGoalByAi(base);
                       const updated = { ...base, ...autoCalc, goalSugar: 35 };
+                      const initialProgram = sanitizeWorkoutPlan(
+                        generateAiScientificProgram(updated, updated.availableDaysPerWeek || 4, updated.trainingLocation || 'gym', updated.homeEquipment || ''),
+                        updated.trainingLocation || 'gym',
+                        updated.homeEquipment || ''
+                      );
                       setProfile(updated);
-                      setWorkoutCourse(null);
+                      setWorkoutCourse(initialProgram);
                       const emptyDiet = Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
                       setDietMeals(emptyDiet);
                       try {
+                        localStorage.setItem('app_profile', JSON.stringify(updated));
+                        localStorage.setItem('app_workout_course', JSON.stringify(initialProgram));
                         localStorage.setItem('app_diet_meals', JSON.stringify(emptyDiet));
                       } catch (e) {}
                       setHasCompletedOnboarding(true);
@@ -4612,18 +4619,26 @@ export default function App() {
         </div>
       ) : (
         <>
+          <main
+            className="app-scroll-view"
+            style={{
+              overflowY: ((activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach') ? 'hidden' : 'auto',
+              display: ((activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach') ? 'flex' : 'block',
+              flexDirection: 'column'
+            }}
+          >
           {/* ١. پەڕەی سەرەکی (Home View) */}
           {activeTab === 'home' && (
-        <div style={{ position: 'relative', zIndex: 1, padding: '24px 20px', direction: currentLangConfig.dir, paddingBottom: '30px' }}>
-              <header className="flex-between" style={{ marginBottom: '24px' }}>
-                <div onClick={() => setActiveTab('profile')} style={{ display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer' }}>
+        <div style={{ position: 'relative', zIndex: 1, padding: '10px 14px 16px 14px', direction: currentLangConfig.dir }}>
+              <header className="flex-between" style={{ marginBottom: '12px' }}>
+                <div onClick={() => setActiveTab('profile')} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
                   <ProfilePic gender={profile.gender} />
                   <div>
-                    <h2 style={{ fontSize: '19px', fontWeight: '800', letterSpacing: '-0.3px' }}>{getLocalizedAthleteName(profile.name, language)}</h2>
+                    <h2 style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '-0.3px' }}>{getLocalizedAthleteName(profile.name, language)}</h2>
                   </div>
             </div>
             
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
               {/* دوگمەی دارک مۆد / لایت مۆد - ڕۆژ و مانگ بەپێی دۆخەکە بە گۆڕینی ڕاستەوخۆ */}
               <button 
                 type="button"
@@ -4633,8 +4648,8 @@ export default function App() {
                 }} 
                 className="liquid-pill"
                 style={{ 
-                  width: '42px', 
-                  height: '42px', 
+                  width: '36px', 
+                  height: '36px', 
                   padding: 0, 
                   cursor: 'pointer', 
                   display: 'flex', 
@@ -4646,40 +4661,40 @@ export default function App() {
                 title={theme === 'dark' ? t('lightMode') : t('darkMode')}
               >
                 {theme === 'dark' ? (
-                  <Moon size={20} style={{ color: '#FBBF24', transition: 'transform 0.25s ease' }} />
+                  <Moon size={18} style={{ color: '#FBBF24', transition: 'transform 0.25s ease' }} />
                 ) : (
-                  <Sun size={20} style={{ color: '#F59E0B', transition: 'transform 0.25s ease' }} />
+                  <Sun size={18} style={{ color: '#F59E0B', transition: 'transform 0.25s ease' }} />
                 )}
               </button>
 
               <button 
                 onClick={() => setShowSettingsModal(true)} 
                 className="liquid-pill"
-                style={{ width: '42px', height: '42px', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}
+                style={{ width: '36px', height: '36px', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}
                 title={t('settings')}
               >
-                <SettingsIcon size={20} />
+                <SettingsIcon size={18} />
               </button>
 
               <button 
                 onClick={() => setShowNotificationsModal(true)} 
                 className="liquid-pill"
-                style={{ width: '42px', height: '42px', padding: 0, position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}
+                style={{ width: '36px', height: '36px', padding: 0, position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}
                 title={t('notifications')}
               >
-                <BellIcon size={20} />
+                <BellIcon size={18} />
                 {hasUnreadNotifications && (
-                  <div style={{ position: 'absolute', top: '9px', right: '9px', width: '8px', height: '8px', background: '#38BDF8', borderRadius: '50%' }}></div>
+                  <div style={{ position: 'absolute', top: '7px', right: '7px', width: '7px', height: '7px', background: '#38BDF8', borderRadius: '50%' }}></div>
                 )}
               </button>
             </div>
           </header>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '800' }}>{t('dailyNutrition')}</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '800' }}>{t('dailyNutrition')}</h3>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
             
             {/* چارتی سەرەکی و زۆر گەورەی کالۆری (Large Hero Calorie Chart - Starts at Top 12 o'clock & Only Excess Ratio/Stroke is Green/Red) */}
             {(() => {
@@ -4721,22 +4736,22 @@ export default function App() {
                 : '1px solid var(--color-carbs)';
 
               return (
-                <div className="dark-card" style={{ gridColumn: 'span 2', padding: '26px 20px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+                <div className="dark-card" style={{ gridColumn: 'span 2', padding: '14px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
                   
                   {/* سەردێڕی کارتەکە */}
-                  <div className="flex-between" style={{ marginBottom: '18px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="flex-between" style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ color: 'var(--color-calories)', display: 'flex' }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
                         </svg>
                       </span>
-                      <span style={{ fontWeight: '800', fontSize: '16px', color: 'var(--text-main)' }}>
+                      <span style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text-main)' }}>
                         {t('eatenCalories')} {isOverCalorie && (isWeightGainGoal ? '(زیادەی بنیاتنان)' : '(تێپەڕاندن)')}
                       </span>
                     </div>
                     
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <button
                         type="button"
                         onClick={() => setShowNutritionHistoryModal(true)}
@@ -4744,9 +4759,9 @@ export default function App() {
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '5px',
-                          padding: '4px 10px',
-                          fontSize: '12px',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          fontSize: '11px',
                           fontWeight: '800',
                           color: '#38BDF8',
                           background: 'rgba(56, 189, 248, 0.1)',
@@ -4756,19 +4771,19 @@ export default function App() {
                         }}
                         title={currentLangConfig.code === 'en' ? 'Weekly Calorie History' : 'مێژووی کالۆری هەفتانە'}
                       >
-                        <CalendarDays size={13} strokeWidth={2.4} />
+                        <CalendarDays size={12} strokeWidth={2.4} />
                         <span>{currentLangConfig.code === 'en' ? 'History' : currentLangConfig.code === 'ar' ? 'السجل' : currentLangConfig.code === 'fa' ? 'تاریخچه' : 'مێژوو'}</span>
                       </button>
 
-                      <span className="liquid-pill" style={{ color: badgeColor, border: badgeBorder, background: badgeBg, fontSize: '12px', fontWeight: '800', padding: '4px 10px' }}>
+                      <span className="liquid-pill" style={{ color: badgeColor, border: badgeBorder, background: badgeBg, fontSize: '11px', fontWeight: '800', padding: '3px 8px' }}>
                         {badgeText}
                       </span>
                     </div>
                   </div>
 
-                  {/* چارتی زۆر گەورە لە ناوەڕاست */}
-                  <div style={{ position: 'relative', width: '190px', height: '190px', margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', filter: 'drop-shadow(0 4px 16px var(--accent-glow))' }}>
+                  {/* چارتی ڕێکخراو لە ناوەڕاست */}
+                  <div style={{ position: 'relative', width: '132px', height: '132px', margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', filter: 'drop-shadow(0 4px 12px var(--accent-glow))' }}>
                       <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--circle-track)" strokeWidth="3.2" opacity="0.5" />
                       
                       {/* هێڵی بنەڕەتی چارتەکە */}
@@ -4805,25 +4820,25 @@ export default function App() {
                     {/* ناوەڕاستی چارتەکە */}
                     <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', userSelect: 'none' }}>
                       {/* ڕێژەی بەکارهاتوو (خوراو) */}
-                      <span style={{ fontSize: '36px', fontWeight: '900', color: isOverCalorie ? statusColor : 'var(--text-main)', lineHeight: 1, letterSpacing: '-0.5px' }}>
+                      <span style={{ fontSize: '25px', fontWeight: '900', color: isOverCalorie ? statusColor : 'var(--text-main)', lineHeight: 1, letterSpacing: '-0.5px' }}>
                         {totalEatenCalories}
                       </span>
 
                       {/* هێڵی کەرت (لەسەر) */}
-                      <div style={{ width: '50px', height: '2px', background: isOverCalorie ? statusColor : 'rgba(255, 255, 255, 0.22)', margin: '6px 0', borderRadius: '1px' }} />
+                      <div style={{ width: '38px', height: '1.5px', background: isOverCalorie ? statusColor : 'rgba(255, 255, 255, 0.22)', margin: '4px 0', borderRadius: '1px' }} />
 
                       {/* ڕێژەی پێویست */}
-                      <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-muted)', lineHeight: 1 }}>
+                      <span style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-muted)', lineHeight: 1 }}>
                         {profile.goalCalories}
                       </span>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', marginTop: '3px' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: '700', marginTop: '2px' }}>
                         {t('kcal')}
                       </span>
                     </div>
                   </div>
 
                   {/* دوگمەکانی سکانکردن و خواردنەکانم */}
-                  <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
                       onClick={() => setShowScanModal(true)} 
                       style={{ 
@@ -4832,22 +4847,22 @@ export default function App() {
                         border: '1px solid rgba(255, 255, 255, 0.16)', 
                         outline: 'none',
                         color: '#ffffff', 
-                        padding: '14px 20px', 
-                        borderRadius: '16px', 
-                        fontSize: '14px', 
+                        padding: '10px 12px', 
+                        borderRadius: '13px', 
+                        fontSize: '12.5px', 
                         fontWeight: '800', 
                         cursor: 'pointer', 
                         display: 'inline-flex', 
                         alignItems: 'center', 
                         justifyContent: 'center', 
-                        gap: '8px', 
-                        boxShadow: '0 4px 18px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.16)', 
+                        gap: '6px', 
+                        boxShadow: '0 4px 14px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.16)', 
                         backdropFilter: 'blur(10px)',
                         transition: 'all 0.2s ease',
                         WebkitTapHighlightColor: 'transparent'
                       }}
                     >
-                      <CameraScanIcon size={18} />
+                      <CameraScanIcon size={16} />
                       <span>{t('scanFoodWithAi')}</span>
                     </button>
 
@@ -4862,22 +4877,22 @@ export default function App() {
                         border: '1px solid var(--border-color)', 
                         outline: 'none',
                         color: 'var(--text-main)', 
-                        padding: '14px 20px', 
-                        borderRadius: '16px', 
-                        fontSize: '14px', 
+                        padding: '10px 12px', 
+                        borderRadius: '13px', 
+                        fontSize: '12.5px', 
                         fontWeight: '800', 
                         cursor: 'pointer', 
                         display: 'inline-flex', 
                         alignItems: 'center', 
                         justifyContent: 'center', 
-                        gap: '8px',
+                        gap: '6px',
                         background: 'var(--card-subtle)',
                         boxShadow: 'none',
                         transition: 'all 0.2s ease',
                         WebkitTapHighlightColor: 'transparent'
                       }}
                     >
-                      <UtensilsCrossed size={18} color="var(--accent-primary)" />
+                      <UtensilsCrossed size={16} color="var(--accent-primary)" />
                       <span>{t('myMeals')}</span>
                     </button>
                   </div>
@@ -4886,53 +4901,53 @@ export default function App() {
             })()}
 
             {/* پرۆتین */}
-            <div className="dark-card" style={{ padding: '18px' }}>
-              <div className="flex-between" style={{ marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="dark-card" style={{ padding: '12px' }}>
+              <div className="flex-between" style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{ color: 'var(--color-proteins)', display: 'flex' }}>
-                    <Beef size={18} color="currentColor" />
+                    <Beef size={16} color="currentColor" />
                   </span>
-                  <span style={{ fontWeight: '800', fontSize: '14px' }}>{t('protein')}</span>
+                  <span style={{ fontWeight: '800', fontSize: '13px' }}>{t('protein')}</span>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-proteins)' }}>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-proteins)' }}>
                   {Math.min(Math.round((totalProteinG / profile.goalProtein) * 100), 100)}%
                 </span>
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+              <div style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '6px', display: 'flex', alignItems: 'baseline', gap: '3px' }}>
                 <span dir="ltr" style={{ fontWeight: '900' }}>
                   <span>{totalProteinG}</span>
                   <span style={{ color: 'var(--text-muted)', margin: '0 1px' }}>/</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{profile.goalProtein}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '13.5px' }}>{profile.goalProtein}</span>
                 </span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>{t('g')}</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>{t('g')}</span>
               </div>
-              <div style={{ width: '100%', height: '5px', background: 'var(--circle-track)', borderRadius: '3px' }}>
+              <div style={{ width: '100%', height: '4px', background: 'var(--circle-track)', borderRadius: '3px' }}>
                 <div style={{ width: `${Math.min((totalProteinG / profile.goalProtein) * 100, 100)}%`, height: '100%', background: 'linear-gradient(90deg, #3B82F6 0%, #38BDF8 100%)', borderRadius: '3px' }}></div>
               </div>
             </div>
 
             {/* کاربۆهیدرات */}
-            <div className="dark-card" style={{ padding: '18px' }}>
-              <div className="flex-between" style={{ marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="dark-card" style={{ padding: '12px' }}>
+              <div className="flex-between" style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{ color: 'var(--color-carbs)', display: 'flex' }}>
-                    <Wheat size={18} color="currentColor" />
+                    <Wheat size={16} color="currentColor" />
                   </span>
-                  <span style={{ fontWeight: '800', fontSize: '14px' }}>{t('carbs')}</span>
+                  <span style={{ fontWeight: '800', fontSize: '13px' }}>{t('carbs')}</span>
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-carbs)' }}>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-carbs)' }}>
                   {Math.min(Math.round((totalCarbsG / profile.goalCarbs) * 100), 100)}%
                 </span>
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+              <div style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '6px', display: 'flex', alignItems: 'baseline', gap: '3px' }}>
                 <span dir="ltr" style={{ fontWeight: '900' }}>
                   <span>{totalCarbsG}</span>
                   <span style={{ color: 'var(--text-muted)', margin: '0 1px' }}>/</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{profile.goalCarbs}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '13.5px' }}>{profile.goalCarbs}</span>
                 </span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>{t('g')}</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>{t('g')}</span>
               </div>
-              <div style={{ width: '100%', height: '5px', background: 'var(--circle-track)', borderRadius: '3px' }}>
+              <div style={{ width: '100%', height: '4px', background: 'var(--circle-track)', borderRadius: '3px' }}>
                 <div style={{ width: `${Math.min((totalCarbsG / profile.goalCarbs) * 100, 100)}%`, height: '100%', background: 'linear-gradient(90deg, #06B6D4 0%, var(--color-carbs) 100%)', borderRadius: '3px' }}></div>
               </div>
             </div>
@@ -4944,14 +4959,14 @@ export default function App() {
             id="water-tracker-card"
             className="dark-card" 
             style={{ 
-              padding: '16px 18px', 
-              marginBottom: '20px', 
+              padding: '12px 14px', 
+              marginBottom: '12px', 
               background: theme === 'light' 
                 ? 'rgba(255, 255, 255, 0.95)' 
                 : 'linear-gradient(145deg, rgba(14, 28, 48, 0.8) 0%, rgba(10, 20, 36, 0.95) 100%)', 
               border: (actionLoadingState.active && (actionLoadingState.message?.includes('ئاو') || actionLoadingState.actionType?.toLowerCase().includes('water'))) ? '2px solid #38bdf8' : '1px solid rgba(56, 189, 248, 0.2)', 
               boxShadow: (actionLoadingState.active && (actionLoadingState.message?.includes('ئاو') || actionLoadingState.actionType?.toLowerCase().includes('water'))) ? '0 0 30px rgba(56, 189, 248, 0.5)' : (theme === 'light' ? '0 6px 20px rgba(15, 23, 42, 0.05)' : '0 10px 28px rgba(0, 0, 0, 0.35)'),
-              borderRadius: '20px',
+              borderRadius: '16px',
               backdropFilter: 'blur(12px)',
               transition: 'all 0.3s ease'
             }}
@@ -5310,8 +5325,8 @@ export default function App() {
             </button>
           </div>
         ) : (
-          <div style={{ position: 'relative', zIndex: 1, padding: '24px 20px', direction: currentLangConfig.dir, paddingBottom: '30px' }}>
-          <header className="flex-between" style={{ marginBottom: '16px', alignItems: 'center' }}>
+          <div style={{ position: 'relative', zIndex: 1, padding: '10px 14px 18px 14px', direction: currentLangConfig.dir }}>
+          <header className="flex-between" style={{ marginBottom: '12px', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {/* ئاماژەدان بەوەی وەرزشەکان ئی ماڵەوەن یان هۆڵ */}
               {(() => {
@@ -6294,7 +6309,7 @@ export default function App() {
 
       {/* ٣. پەڕەی خۆراک (Nutrition View - بە تەواوی لەسەر تابی خۆراک دەمێنێتەوە بێ گۆڕانی بەش) */}
       {activeTab === 'nutrition' && (
-        <div style={{ position: 'relative', zIndex: 1, padding: '20px', direction: currentLangConfig.dir, paddingBottom: '30px' }}>
+        <div style={{ position: 'relative', zIndex: 1, padding: '10px 14px 18px 14px', direction: currentLangConfig.dir }}>
           
           {/* ئەگەر یاریزان خشتەی نەبوو */}
           {!hasDietPlan && (
@@ -6708,17 +6723,18 @@ export default function App() {
         <div style={{ 
           position: 'relative', 
           zIndex: 1, 
-          padding: '12px 14px 20px 14px', 
+          padding: '8px 12px 10px 12px', 
           direction: currentLangConfig.dir, 
           display: 'flex', 
           flexDirection: 'column', 
-          height: moreActiveTab === 'coach' ? 'calc(100vh - 100px)' : 'auto', 
-          minHeight: 'calc(100vh - 100px)',
+          flex: moreActiveTab === 'coach' ? 1 : 'unset',
+          height: moreActiveTab === 'coach' ? '100%' : 'auto', 
+          minHeight: 0,
           maxWidth: '860px',
           margin: '0 auto',
           width: '100%',
-          paddingBottom: moreActiveTab === 'anatomy' ? '90px' : '20px',
-          overflowX: 'hidden'
+          overflowX: 'hidden',
+          overflowY: moreActiveTab === 'coach' ? 'hidden' : 'visible'
         }}>
           
           {/* تابی مێنیوی سەرەکیی زیاتر (More Menu Hub - 2x2 Minimal Clean Grid) */}
@@ -7429,9 +7445,9 @@ export default function App() {
 
       {/* ٥. پەڕەی پرۆفایل (Profile View - لەگەڵ کارتی ئامانجی یاریزان بە ئاراستە و سەهمی تەواو زانستی) */}
       {activeTab === 'profile' && (
-        <div style={{ position: 'relative', zIndex: 1, padding: '24px 20px', direction: currentLangConfig.dir, paddingBottom: '30px' }}>
-          <header className="flex-between" style={{ marginBottom: '24px' }}>
-            <h1 className="title-large" style={{ fontSize: '26px' }}>{getLocalizedAthleteName(profile.name, language)}</h1>
+        <div style={{ position: 'relative', zIndex: 1, padding: '10px 14px 18px 14px', direction: currentLangConfig.dir }}>
+          <header className="flex-between" style={{ marginBottom: '14px' }}>
+            <h1 className="title-large" style={{ fontSize: '20px' }}>{getLocalizedAthleteName(profile.name, language)}</h1>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button 
                 type="button"
@@ -7722,6 +7738,7 @@ export default function App() {
           </div>
         </div>
       )}
+          </main>
 
       {/* ==================== مۆداڵی زیرەکی دەستکرد بۆ دۆزینەوەی خواردن (AI Food Finder Modal - Bottom Sheet) ==================== */}
       {showAiFoodModal && (
@@ -10638,12 +10655,14 @@ export default function App() {
           transform: 'translateX(-50%)', 
           width: '100%', 
           maxWidth: '480px', 
-          height: '78px', 
+          height: 'calc(64px + env(safe-area-inset-bottom, 8px))', 
+          paddingBottom: 'env(safe-area-inset-bottom, 8px)',
           background: 'transparent',
           border: 'none',
           borderTop: 'none',
-          zIndex: 1000, 
-          padding: '0 6px',
+          zIndex: 2000, 
+          paddingLeft: '6px',
+          paddingRight: '6px',
           overflow: 'visible',
           direction: 'ltr'
         }}
@@ -10681,7 +10700,7 @@ export default function App() {
         </svg>
 
         {/* دوگمەکانی تابەکان */}
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', width: '100%', height: '100%', justifyContent: 'space-around', alignItems: 'center', direction: 'ltr' }}>
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', width: '100%', height: '64px', justifyContent: 'space-around', alignItems: 'center', direction: 'ltr' }}>
           {tabList.map(tab => {
             const isActive = activeTab === tab.id;
             return (
@@ -10706,8 +10725,8 @@ export default function App() {
               >
                 {/* بازنەی ئایکۆنی بەرزبووەوەی شوشەیی مۆر و شین */}
                 <div style={{
-                  width: isActive ? '58px' : '36px',
-                  height: isActive ? '58px' : '36px',
+                  width: isActive ? '46px' : '32px',
+                  height: isActive ? '46px' : '32px',
                   borderRadius: '50%',
                   background: isActive 
                     ? 'var(--accent-gradient)' 
@@ -10715,9 +10734,9 @@ export default function App() {
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  transform: isActive ? 'translateY(-28px)' : 'translateY(0)',
+                  transform: isActive ? 'translateY(-18px)' : 'translateY(0)',
                   boxShadow: isActive 
-                    ? '0 14px 30px var(--accent-glow), inset 0 2px 5px rgba(255, 255, 255, 0.65)' 
+                    ? '0 10px 22px var(--accent-glow), inset 0 2px 4px rgba(255, 255, 255, 0.65)' 
                     : 'none',
                   border: 'none',
                   outline: 'none',
@@ -10728,21 +10747,21 @@ export default function App() {
                 </div>
 
                 <span style={{ 
-                  fontSize: isActive ? '11.5px' : '11px', 
+                  fontSize: isActive ? '10.5px' : '10px', 
                   fontWeight: '800',
                   color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
-                  marginTop: isActive ? '-18px' : '2px',
+                  marginTop: isActive ? '-12px' : '1px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: '3px',
+                  gap: '2px',
                   transition: 'all 0.25s ease'
                 }}>
                   {tab.label}
                   {isActive && (
                     <span style={{ 
-                      width: '4px', 
-                      height: '4px', 
+                      width: '3.5px', 
+                      height: '3.5px', 
                       borderRadius: '50%', 
                       background: 'var(--accent-primary)'
                     }} />

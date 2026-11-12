@@ -1,5 +1,8 @@
 {
   "appId": "com.kurdfit.app",
-  "appName": "Kurd Fit",
-  "webDir": "out"
+  "appName": "BQ GYM",
+  "webDir": "out",
+  "ios": {
+    "contentInset": "never"
+  }
 }

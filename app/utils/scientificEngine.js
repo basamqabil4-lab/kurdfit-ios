@@ -140,11 +140,46 @@ export function sanitizeWorkoutPlan(course, location = 'gym', equipment = '') {
   return course;
 }
 
+const BODY_PART_MAP = {
+  m1: { ku: 'سنگ', en: 'Chest' },
+  m2: { ku: 'شان', en: 'Shoulders' },
+  m3: { ku: 'پشت', en: 'Back' },
+  m4: { ku: 'باڵ و قۆڵ', en: 'Arms (Biceps & Triceps)' },
+  m5: { ku: 'ورگ و کەمەر', en: 'Abs & Waist' },
+  m6: { ku: 'ڕان و قاچ', en: 'Legs (Quads & Hamstrings)' },
+  m7: { ku: 'پوز', en: 'Calves' },
+  f1: { ku: 'سنگ', en: 'Chest' },
+  f2: { ku: 'کەمەر', en: 'Waist & Obliques' },
+  f3: { ku: 'ورگ', en: 'Belly & Lower Abs' },
+  f4: { ku: 'سمت و حەوز', en: 'Glutes & Hips' },
+  f5: { ku: 'ڕان و قاچ', en: 'Legs & Thighs' },
+  f6: { ku: 'باڵ', en: 'Arms' },
+  f7: { ku: 'پشت', en: 'Back' }
+};
+
+export function resolveBodyGoalList(ids = [], lang = 'ku') {
+  if (!Array.isArray(ids)) return [];
+  return ids.map(id => {
+    const found = BODY_PART_MAP[id];
+    if (!found) return id;
+    return lang === 'en' ? found.en : `${found.ku} (${found.en})`;
+  });
+}
+
 if (typeof window !== "undefined") window.generateWorkoutDirectly = async (profile, targetDays, location = 'gym', equipment = '', lang = 'ku') => {
-   const days = targetDays || profile?.availableDaysPerWeek || 4;
+   const days = Number(targetDays) || Number(profile?.availableDaysPerWeek) || 4;
    const isHome = location === 'home';
-   const enlargeText = (profile?.bodyGoals?.enlarge || []).join(', ');
-   const shrinkText = (profile?.bodyGoals?.shrink || []).join(', ');
+   const enlargeList = resolveBodyGoalList(profile?.bodyGoals?.enlarge || [], lang);
+   const shrinkList = resolveBodyGoalList(profile?.bodyGoals?.shrink || [], lang);
+   const enlargeText = enlargeList.join(', ');
+   const shrinkText = shrinkList.join(', ');
+   const isFemale = profile?.gender === 'female' || profile?.gender === 'مێ' || profile?.gender === 'ئافرەت';
+   const genderLabel = isFemale ? 'Female (ئافرەت)' : 'Male (پیاو)';
+   const ageVal = Number(profile?.age) || 23;
+   const weightVal = Number(profile?.weight) || 75;
+   const heightVal = Number(profile?.height) || 175;
+   const targetWeightVal = Number(profile?.targetWeight) || weightVal;
+   const paceVal = profile?.goalPace || 'normal';
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani)';
 
    const homeRules = isHome ? `
@@ -155,31 +190,41 @@ CRITICAL RULES FOR HOME WORKOUT:
   * Back: Floor Reverse Push-up, Superman Holds, Glute Bridges
   * Shoulders: Pike Push-ups
   * Arms: Bench Dips, Diamond Push-ups, Bodyweight Biceps Curl
-  * Legs: Bodyweight Squats, Bulgarian Split Squats, Bodyweight Lunges, Glute Bridges, Bodyweight Standing Calf Raise
-  * Core: Plank, Crunches, Russian Twists, Mountain Climbers, Lying Leg Raises
+  * Legs & Glutes: Bodyweight Squats, Bulgarian Split Squats, Bodyweight Lunges, Glute Bridges, Bodyweight Standing Calf Raise
+  * Core & Waist: Plank, Crunches, Russian Twists, Mountain Climbers, Lying Leg Raises
 - NEVER duplicate the same exercise twice on the same day.
 - NEVER use Doorway Rows, Table Inverted Rows, Gym Ladders, Barbells, or Gym Benches for home bodyweight.
 ` : '';
 
-   const prompt = `You are a professional sports scientist and fitness coach.
-Generate a ${days}-day weekly workout split in ${langName} for:
-- Goal: ${profile?.goal || 'Fitness'}
-- Specific Body Goals to Enlarge / Prioritize: ${enlargeText || 'Overall muscle growth'}
-- Specific Body Goals to Tone / Burn Fat: ${shrinkText || 'Overall fitness'}
-- Workout days: ${days} days per week
-- Location: ${isHome ? 'Home Workout' : 'Gym'}${equipment ? ` (Equipment: ${equipment})` : ''}
-- Weight: ${profile?.weight || 75}kg, Target: ${profile?.targetWeight || 75}kg
-- Injuries: ${(profile?.healthConditions || []).join(', ') || 'None'}
+   const prompt = `You are an elite sports scientist and personal trainer.
+Design a strictly personalized ${days}-day weekly workout program in ${langName} based on this exact athlete profile:
+- Name: ${profile?.name || 'Athlete'}
+- Gender: ${genderLabel}
+- Age: ${ageVal} years old
+- Current Weight: ${weightVal} kg | Height: ${heightVal} cm | Target Weight: ${targetWeightVal} kg
+- Primary Goal: ${profile?.goal || (targetWeightVal > weightVal ? 'Muscle Gain' : targetWeightVal < weightVal ? 'Fat Loss' : 'Body Recomposition')}
+- Progression Pace: ${paceVal}
+- Priority Muscles to ENLARGE / Hypertrophy Focus: ${enlargeText || (isFemale ? 'Glutes, Legs & Toned Upper Body' : 'Balanced Chest, Back, Shoulders, Arms & Legs')}
+- Priority Areas to SHRINK / Burn Fat & Tone: ${shrinkText || 'Core & Overall Body Fat'}
+- Training Days: ${days} days per week (${7 - days} rest days)
+- Location: ${isHome ? 'Home Workout' : 'Gym'}${equipment ? ` (Available Equipment: ${equipment})` : ''}
+- Injuries / Health Conditions: ${(profile?.healthConditions || []).join(', ') || 'None'}
 ${homeRules}
 
-Return ONLY a valid JSON object matching this structure:
+PERSONALIZATION REQUIREMENTS:
+1. You MUST tailor the weekly split, exercise selection, sets, and reps directly to the athlete's gender (${genderLabel}), age (${ageVal}), weight (${weightVal}kg -> ${targetWeightVal}kg), and priority body goals (Enlarge: ${enlargeText || 'Balanced'}, Shrink: ${shrinkText || 'None'}).
+2. Give extra volume (+1 exercise or +1 set) to the priority muscles in "Enlarge", and include targeted high-rep metabolic/core/toning exercises for areas in "Shrink".
+3. Strictly avoid any exercise that stresses the listed injuries (${(profile?.healthConditions || []).join(', ') || 'None'}).
+4. In "rationale", write a clear 1-2 sentence explanation in ${langName} mentioning the athlete's weight (${weightVal}kg -> ${targetWeightVal}kg) and selected focus muscles so they see the program is custom-built for them.
+
+Return ONLY a valid JSON object matching this exact structure:
 {
   "id": "ai_course_${days}d_${Date.now()}",
-  "title": "${days}-Day Scientific AI Program",
-  "englishSubtitle": "${days}-Day AI Program",
+  "title": "Personalized title in ${langName}",
+  "englishSubtitle": "${days}-Day Custom AI Split",
   "daysPerWeek": ${days},
   "durationDays": ${profile?.targetDays || 45},
-  "rationale": "Scientific tailored workout plan",
+  "rationale": "Personalized scientific explanation in ${langName}",
   "weeklyPlan": [
     {
       "dayKey": "d1",
@@ -190,22 +235,25 @@ Return ONLY a valid JSON object matching this structure:
       "exercises": [
         {
           "name": "Exercise name in ${langName}",
-          "englishName": "Exercise Name in English",
+          "englishName": "Standard Exercise Name in English",
           "sets": 4,
           "reps": "10-12",
+          "rest": "60s",
           "muscle": "Target muscle in ${langName}"
         }
       ]
     }
   ]
 }
-Note: "weeklyPlan" must have exactly 7 objects for the 7 days of the week.
-Exactly ${days} days must have isRestDay: false (each with 3-5 exercises), and ${7 - days} days must have isRestDay: true (exercises: []).
+Note: "weeklyPlan" must have exactly 7 objects (Saturday d1 through Friday d7).
+Exactly ${days} days must have isRestDay: false (each with 4-5 tailored exercises), and ${7 - days} days must have isRestDay: true (exercises: []).
 RESPOND ONLY WITH PURE JSON. NO MARKDOWN.`;
 
    const resText = await window.callGeminiAPI(prompt);
    const parsed = JSON.parse(cleanJsonText(resText));
    if (parsed && Array.isArray(parsed.weeklyPlan) && parsed.weeklyPlan.length === 7) {
+     parsed.trainingLocation = location;
+     parsed.homeEquipment = equipment;
      return sanitizeWorkoutPlan(parsed, location, equipment);
    }
    throw new Error("Invalid format from AI");
@@ -383,27 +431,54 @@ export function calculateScientificGoalByAi({
 }
 
 // ==================== مەکینەی زانستی داڕشتنی کۆرس بەپێی دۆخی ڕاستەقینەی بەکارهێنەر ====================
-export function generateAiScientificProgram({ weight = 78, targetWeight = 84, targetDays = 45, age = 23, goal = '', goalPace = 'normal', healthConditions = [] }, selectedDaysCount = 4, location = 'gym', equipment = '') {
+export function generateAiScientificProgram({ weight = 78, targetWeight = 84, targetDays = 45, age = 23, gender = 'male', goal = '', goalPace = 'normal', bodyGoals = { enlarge: [], shrink: [] }, healthConditions = [] }, selectedDaysCount = 4, location = 'gym', equipment = '') {
   const conditions = healthConditions || [];
   const hasKnee = conditions.some(c => c.includes('ئەژنۆ') || c.toLowerCase().includes('knee'));
   const hasBack = conditions.some(c => c.includes('پشت') || c.toLowerCase().includes('back') || c.includes('دیسک'));
-  const isBulk = targetWeight >= weight;
-  const isCut = targetWeight < weight || goal.includes('دابەزاندن') || goal.toLowerCase().includes('cut') || goal.toLowerCase().includes('loss');
+  const hasShoulder = conditions.some(c => c.includes('شان') || c.toLowerCase().includes('shoulder'));
+  const isFemale = gender === 'female' || gender === 'مێ' || gender === 'ئافرەت';
+  const isBulk = targetWeight > weight || goal.includes('زیادکردن') || goal.includes('گەشە') || goal.toLowerCase().includes('bulk');
+  const isCut = targetWeight < weight || goal.includes('دابەزاندن') || goal.includes('سوتاندن') || goal.toLowerCase().includes('cut') || goal.toLowerCase().includes('loss');
   const pace = (goalPace && ['slow', 'normal', 'fast', 'very_fast'].includes(goalPace)) ? goalPace : 'normal';
 
-  // ڕێکخستنی کاتی پشوو و سێت و دووبارە بەپێی خێرایی (Pace)
+  const enlargeIds = Array.isArray(bodyGoals?.enlarge) ? bodyGoals.enlarge : [];
+  const shrinkIds = Array.isArray(bodyGoals?.shrink) ? bodyGoals.shrink : [];
+
+  const wantChest = enlargeIds.some(x => x === 'm1' || x === 'f1' || String(x).includes('سنگ'));
+  const wantShoulders = enlargeIds.some(x => x === 'm2' || String(x).includes('شان'));
+  const wantBack = enlargeIds.some(x => x === 'm3' || x === 'f7' || String(x).includes('پشت'));
+  const wantArms = enlargeIds.some(x => x === 'm4' || x === 'f6' || String(x).includes('باڵ') || String(x).includes('قۆڵ'));
+  const wantGlutes = enlargeIds.some(x => x === 'f4' || String(x).includes('سمت')) || (isFemale && !enlargeIds.length);
+  const wantLegs = enlargeIds.some(x => x === 'm6' || x === 'f5' || String(x).includes('ڕان') || String(x).includes('قاچ'));
+  const wantCalves = enlargeIds.some(x => x === 'm7' || String(x).includes('پوز'));
+  const shrinkCore = shrinkIds.some(x => ['m5', 'f2', 'f3'].includes(x) || String(x).includes('ورگ') || String(x).includes('کەمەر')) || isCut;
+  const shrinkLower = shrinkIds.some(x => ['m6', 'f4', 'f5'].includes(x));
+
+  // ڕێکخستنی کاتی پشوو و سێت و دووبارە بەپێی خێرایی (Pace) و تەمەن
+  const isSenior = Number(age) >= 42;
   const restSec = pace === 'slow' ? 90 : pace === 'normal' ? 60 : pace === 'fast' ? 45 : 35;
-  const setsMain = pace === 'slow' ? 3 : pace === 'very_fast' ? 5 : 4;
+  const setsMain = isSenior ? 3 : (pace === 'slow' ? 3 : pace === 'very_fast' ? 5 : 4);
   const setsSec = pace === 'slow' ? 3 : pace === 'very_fast' ? 4 : 3;
 
   const repsMain = isBulk 
-    ? (pace === 'very_fast' ? '6-8' : pace === 'fast' ? '8-10' : '8-10')
+    ? (pace === 'very_fast' ? '6-8' : '8-10')
     : (pace === 'very_fast' ? '15-20' : pace === 'fast' ? '12-15' : '10-12');
 
   const repsSec = isBulk ? '10-12' : (pace === 'very_fast' ? '15-18' : '12-15');
 
   const cardioMins = pace === 'slow' ? 15 : pace === 'normal' ? 20 : pace === 'fast' ? 25 : 30;
-  const cardioEx = hasKnee ? {
+  const isHome = location === 'home';
+  const hasDumbbells = equipment.toLowerCase().includes('دەستەوانە') || equipment.toLowerCase().includes('دەمبڵ') || equipment.toLowerCase().includes('dumbbell');
+  const hasBands = equipment.toLowerCase().includes('لاستیک') || equipment.toLowerCase().includes('قایش') || equipment.toLowerCase().includes('band');
+
+  const cardioEx = isHome ? {
+    name: hasKnee ? 'مارشی خێرا لە شوێنی خۆت (' + cardioMins + ' خولەک)' : 'چیاڕەوی خێرا و کاردیۆ (Mountain Climbers)',
+    englishName: hasKnee ? 'Low Impact High Knees March' : 'Mountain Climbers',
+    sets: 3,
+    reps: '45s',
+    rest: '30s',
+    muscle: 'کاردیۆ و سوتاندنی چەوری'
+  } : hasKnee ? {
     name: 'پاسکیلی وەستاو (' + cardioMins + ' خولەک - پاراستنی ئەژنۆ)',
     englishName: 'Stationary Bike',
     sets: 1,
@@ -426,54 +501,107 @@ export function generateAiScientificProgram({ weight = 78, targetWeight = 84, ta
     muscle: 'کاردیۆ و سوتاندنی چەوری'
   };
 
-  const attachCardio = (list, shouldAttach) => {
-    if (!shouldAttach || !isCut) return list;
-    return [...list, cardioEx];
+  const coreBurnEx = isHome ? {
+    name: 'پێچکردنی ڕووسی بۆ تواندنەوەی چەوری کەمەر و ورگ',
+    englishName: 'Russian Twists',
+    sets: 4,
+    reps: '20',
+    rest: '30s',
+    muscle: 'ورگ و کەمەر'
+  } : {
+    name: 'کڕانچی سک بە کێبڵ + بەرزکردنەوەی قاچ بۆ تواندنەوەی ورگ',
+    englishName: 'Cable Rope Crunch',
+    sets: 4,
+    reps: '15-20',
+    rest: '40s',
+    muscle: 'ورگ و کەمەر'
+  };
+
+  const attachCustomFinishers = (list, dayType, shouldCardio) => {
+    const out = [...list];
+    if (dayType === 'push' && wantChest) {
+      out.push(isHome
+        ? { name: 'شناوی خاو بە تەرکیزی سنگ (Tempo Push-ups)', englishName: 'Push-ups', sets: setsMain + 1, reps: '12-15', rest: restSec + 's', muscle: 'سنگ (تەرکیزی تایبەت)' }
+        : { name: 'پێک دێک فلای بە ئامێر بۆ پڕکردنەوەی ناوەڕاستی سنگ', englishName: 'Pec Deck Machine Fly', sets: setsMain, reps: '12-15', rest: restSec + 's', muscle: 'سنگ (تەرکیزی تایبەت)' }
+      );
+    }
+    if (dayType === 'pull' && wantBack) {
+      out.push(isHome
+        ? { name: 'ڕاهێنانی سوپەرمان بە ڕاگرتن بۆ توندکردنی پشت', englishName: 'Superman Holds', sets: setsMain, reps: '15', rest: restSec + 's', muscle: 'پشت (تەرکیزی تایبەت)' }
+        : { name: 'ڕاکێشانی کێبڵ بە دەسکی تەسک (Close-Grip Pulldown)', englishName: 'Close Grip Lat Pulldown', sets: setsMain, reps: '10-12', rest: restSec + 's', muscle: 'پانیی پشت (تەرکیزی تایبەت)' }
+      );
+    }
+    if ((dayType === 'arms' || dayType === 'push' || dayType === 'pull') && wantArms && out.length < 5) {
+      out.push(isHome
+        ? { name: hasDumbbells ? 'کۆنسێنترەیشن کێرڵ بە دەمبڵ بۆ لووتکەی باڵ' : 'پاشەملەی چڕ لەسەر کورسی (Bench Dips)', englishName: hasDumbbells ? 'Dumbbell Concentration Curl' : 'Bench Dips', sets: setsMain, reps: '12-15', rest: restSec + 's', muscle: 'باڵ و قۆڵ (تەرکیزی تایبەت)' }
+        : { name: 'پریچەر کێرڵ بە ئامێر یان باڕی EZ بۆ گەورەکردنی باڵ', englishName: 'EZ Bar Preacher Curl', sets: setsMain, reps: '10-12', rest: restSec + 's', muscle: 'باڵ و قۆڵ (تەرکیزی تایبەت)' }
+      );
+    }
+    if (dayType === 'legs' && wantGlutes) {
+      out.unshift(isHome
+        ? { name: 'هیپ ثرەست / بەرزکردنەوەی حەوز بە تەرکیزی سمت', englishName: 'Glute Bridges', sets: setsMain + 1, reps: '15-20', rest: restSec + 's', muscle: 'سمت و حەوز (تەرکیزی تایبەت)' }
+        : { name: 'باڕبێڵ هیپ ثرەست بۆ گەورەکردن و فۆڕمکردنی سمت', englishName: 'Barbell Hip Thrust', sets: setsMain + 1, reps: '10-12', rest: restSec + 's', muscle: 'سمت و حەوز (تەرکیزی تایبەت)' }
+      );
+    }
+    if (dayType === 'legs' && wantCalves) {
+      out.push(isHome
+        ? { name: 'بەرزبوونەوەی پوز بە یەک پێ بە چڕی بەرز', englishName: 'Bodyweight Standing Calf Raise', sets: 5, reps: '20', rest: '35s', muscle: 'پوز (تەرکیزی تایبەت)' }
+        : { name: 'سۆڵە بە دانیشتنەوە بە ئامێر (Seated Calf Raise)', englishName: 'Seated Calf Raise', sets: 5, reps: '15-20', rest: '40s', muscle: 'پوز (تەرکیزی تایبەت)' }
+      );
+    }
+    if (shrinkCore && (dayType === 'arms' || dayType === 'full' || dayType === 'pull')) {
+      out.push(coreBurnEx);
+    }
+    if (shouldCardio && (isCut || shrinkCore || shrinkLower)) {
+      out.push(cardioEx);
+    }
+    return out;
   };
 
   const paceCalBonus = pace === 'slow' ? -30 : pace === 'normal' ? 0 : pace === 'fast' ? 40 : 80;
-
-  const isHome = location === 'home';
-  const hasDumbbells = equipment.toLowerCase().includes('دەستەوانە') || equipment.toLowerCase().includes('دەمبڵ') || equipment.toLowerCase().includes('dumbbell');
-  const hasBands = equipment.toLowerCase().includes('لاستیک') || equipment.toLowerCase().includes('قایش') || equipment.toLowerCase().includes('band');
+  const chestSets = wantChest ? setsMain + 1 : setsMain;
+  const backSets = wantBack ? setsMain + 1 : setsMain;
+  const legSets = (wantLegs || wantGlutes) ? setsMain + 1 : setsMain;
+  const armSets = wantArms ? setsMain + 1 : setsMain;
+  const shoulderSets = wantShoulders ? setsMain + 1 : setsSec;
 
   // Push Day
   const exPush = isHome ? [
-    { name: hasDumbbells ? 'پاڵەپەستۆی سنگ بە دەمبڵ لەسەر زەوی' : 'شناو (Push-ups)', englishName: hasDumbbells ? 'Floor Dumbbell Press' : 'Push-ups', sets: setsMain, reps: repsMain, rest: restSec + 's', muscle: 'سنگ' },
+    { name: hasDumbbells ? 'پاڵەپەستۆی سنگ بە دەمبڵ لەسەر زەوی' : 'شناو (Push-ups)', englishName: hasDumbbells ? 'Floor Dumbbell Press' : 'Push-ups', sets: chestSets, reps: repsMain, rest: restSec + 's', muscle: 'سنگ' },
     { name: hasBands ? 'فڕینی سنگ بە لاستیک' : 'شناوی فراوان', englishName: hasBands ? 'Band Chest Fly' : 'Wide Push-ups', sets: setsSec, reps: '12-15', rest: restSec + 's', muscle: 'سنگ' },
-    { name: hasDumbbells ? 'شان پرێس بە دەمبڵ' : 'شناوی پایک (Pike Push-ups)', englishName: hasDumbbells ? 'Dumbbell Shoulder Press' : 'Pike Push-ups', sets: setsSec, reps: repsSec, rest: restSec + 's', muscle: 'شان' },
-    { name: hasDumbbells ? 'پاشەملە بە دەمبڵ' : 'شناوی دایمۆند (Diamond Push-ups)', englishName: hasDumbbells ? 'Dumbbell Triceps Extension' : 'Diamond Push-ups', sets: setsMain, reps: '12', rest: restSec + 's', muscle: 'ترایسێپس' }
+    { name: hasDumbbells ? 'شان پرێس بە دەمبڵ' : 'شناوی پایک (Pike Push-ups)', englishName: hasDumbbells ? 'Dumbbell Shoulder Press' : 'Pike Push-ups', sets: shoulderSets, reps: repsSec, rest: restSec + 's', muscle: 'شان' },
+    { name: hasDumbbells ? 'پاشەملە بە دەمبڵ' : 'شناوی دایمۆند (Diamond Push-ups)', englishName: hasDumbbells ? 'Dumbbell Triceps Extension' : 'Diamond Push-ups', sets: armSets, reps: '12', rest: restSec + 's', muscle: 'ترایسێپس' }
   ] : [
-    { name: 'پاڵەپەستۆی سنگ بە دەمبڵ لەسەر کورسی لار', englishName: 'Incline Dumbbell Bench Press', sets: setsMain, reps: repsMain, rest: restSec + 's', muscle: 'سنگ (سەرەوە)' },
+    { name: 'پاڵەپەستۆی سنگ بە دەمبڵ لەسەر کورسی لار', englishName: 'Incline Dumbbell Bench Press', sets: chestSets, reps: repsMain, rest: restSec + 's', muscle: 'سنگ (سەرەوە)' },
     { name: 'فڕینی سنگ بە کێبڵ لە ڕاوەستانەوە', englishName: 'Standing Cable Chest Fly', sets: setsSec, reps: '12-15', rest: restSec + 's', muscle: 'سنگ' },
-    { name: 'دەمبڵ شۆڵدەر پرێس بە دانیشتنەوە', englishName: 'Seated Dumbbell Shoulder Press', sets: setsSec, reps: '10', rest: restSec + 's', muscle: 'شان' },
-    { name: 'پاشەملە بە کێبڵ بە پەت', englishName: 'Triceps Rope Pushdown', sets: setsMain, reps: '12', rest: restSec + 's', muscle: 'ترایسێپس' }
+    { name: hasShoulder ? 'شان بەرزکردنەوە بۆ لا تەنیشت بە کێبڵ (بێ فشار لەسەر جومگە)' : 'دەمبڵ شۆڵدەر پرێس بە دانیشتنەوە', englishName: hasShoulder ? 'Cable Lateral Raise' : 'Seated Dumbbell Shoulder Press', sets: shoulderSets, reps: '10-12', rest: restSec + 's', muscle: 'شان' },
+    { name: 'پاشەملە بە کێبڵ بە پەت', englishName: 'Triceps Rope Pushdown', sets: armSets, reps: '12', rest: restSec + 's', muscle: 'ترایسێپس' }
   ];
 
   // Pull Day
   const exPull = isHome ? [
-    { name: hasDumbbells ? 'پاروو بە دەمبڵ بە چەمانەوە' : 'بەرزکردنەوەی جەستە بە ئەنیشک لەسەر زەوی (Reverse Push-up)', englishName: hasDumbbells ? 'Bent Over Dumbbell Row' : 'Floor Reverse Push-up', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
+    { name: hasDumbbells ? 'پاروو بە دەمبڵ بە چەمانەوە' : 'بەرزکردنەوەی جەستە بە ئەنیشک لەسەر زەوی (Reverse Push-up)', englishName: hasDumbbells ? 'Bent Over Dumbbell Row' : 'Floor Reverse Push-up', sets: backSets, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
     { name: hasBands ? 'ڕاکێشانی لاستیک بۆ پشت' : 'ڕاهێنانی سوپەرمان لەسەر زەوی (Superman Holds)', englishName: hasBands ? 'Band Rows' : 'Superman Holds', sets: setsSec, reps: repsSec, rest: restSec + 's', muscle: 'خوارەوەی پشت' },
     { name: 'پردی سمت لەسەر زەوی (Glute Bridges)', englishName: 'Glute Bridges', sets: setsSec, reps: '15', rest: restSec + 's', muscle: 'سمت و پشت' },
-    { name: hasDumbbells ? 'قۆڵ دووسەر بە دەمبڵ' : 'کێشانی قۆڵ بە بەرگری جەستە لە دانیشتنەوە', englishName: hasDumbbells ? 'Dumbbell Biceps Curl' : 'Bodyweight Biceps Curl', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس' }
+    { name: hasDumbbells ? 'قۆڵ دووسەر بە دەمبڵ' : 'کێشانی قۆڵ بە بەرگری جەستە لە دانیشتنەوە', englishName: hasDumbbells ? 'Dumbbell Biceps Curl' : 'Bodyweight Biceps Curl', sets: armSets, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس' }
   ] : [
-    { name: 'ڕاکێشانی کێبڵ بۆ سەر سنگ بە فراوانی', englishName: 'Lat Pulldown Wide Grip', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'پشت (لاتس)' },
-    { name: hasBack ? 'پاروو بە کێبڵ بە پاڵپشتی سنگ' : 'پاروو بە دەمبڵ بە تاک دەست', englishName: hasBack ? 'Chest Supported Cable Row' : 'Single Arm Dumbbell Row', sets: setsSec, reps: '10', rest: restSec + 's', muscle: 'ناوەڕاستی پشت' },
+    { name: 'ڕاکێشانی کێبڵ بۆ سەر سنگ بە فراوانی', englishName: 'Lat Pulldown Wide Grip', sets: backSets, reps: repsSec, rest: restSec + 's', muscle: 'پشت (لاتس)' },
+    { name: hasBack ? 'پاروو بە کێبڵ بە پاڵپشتی سنگ' : 'پاروو بە دەمبڵ بە تاک دەست', englishName: hasBack ? 'Chest Supported Cable Row' : 'Single Arm Dumbbell Row', sets: backSets, reps: '10', rest: restSec + 's', muscle: 'ناوەڕاستی پشت' },
     { name: 'کۆکردنەوەی پشتی شان بە کێبڵ (Face Pull)', englishName: 'Cable Face Pull', sets: setsSec, reps: '15', rest: restSec + 's', muscle: 'پشتی شان' },
-    { name: 'قۆڵ دووسەر بە باڕی EZ لەسەر کورسی لار', englishName: 'Incline Dumbbell Biceps Curl', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس' }
+    { name: 'قۆڵ دووسەر بە باڕی EZ لەسەر کورسی لار', englishName: 'Incline Dumbbell Biceps Curl', sets: armSets, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس' }
   ];
 
   // Legs Day
   const exLegs = isHome ? [
-    { name: hasDumbbells ? 'سکوات بە دەمبڵ (Goblet Squat)' : 'سکوات بە کێشی جەستە', englishName: hasDumbbells ? 'Dumbbell Goblet Squat' : 'Bodyweight Squat', sets: setsMain, reps: hasKnee ? '12-15' : repsMain, rest: restSec + 's', muscle: 'ڕان' },
-    { name: hasDumbbells ? 'هەنگاونان بە دەمبڵ (Lunges)' : 'هەنگاونان بێ کێش', englishName: hasDumbbells ? 'Dumbbell Lunges' : 'Bodyweight Lunges', sets: setsSec, reps: '12-15', rest: restSec + 's', muscle: 'قاچ' },
-    { name: 'بەرزکردنەوەی حەوز لەسەر زەوی (Glute Bridges)', englishName: 'Glute Bridges', sets: setsSec, reps: '15-20', rest: restSec + 's', muscle: 'سمت' },
-    { name: hasDumbbells ? 'بەرزبوونەوە لەسەر پەنجەی پێ بە دەمبڵ' : 'بەرزبوونەوەی پوز', englishName: hasDumbbells ? 'Dumbbell Calf Raises' : 'Bodyweight Calf Raises', sets: setsMain, reps: '15-20', rest: restSec + 's', muscle: 'پوز' }
+    { name: hasDumbbells ? 'سکوات بە دەمبڵ (Goblet Squat)' : 'سکوات بە کێشی جەستە', englishName: hasDumbbells ? 'Dumbbell Goblet Squat' : 'Bodyweight Squat', sets: legSets, reps: hasKnee ? '12-15' : repsMain, rest: restSec + 's', muscle: 'ڕان' },
+    { name: hasDumbbells ? 'هەنگاونان بە دەمبڵ (Lunges)' : 'سکواتی بولگاری بە یەک پێ', englishName: hasDumbbells ? 'Dumbbell Lunges' : 'Bulgarian Split Squats', sets: legSets, reps: '12-15', rest: restSec + 's', muscle: isFemale ? 'سمت و قاچ' : 'قاچ' },
+    { name: 'بەرزکردنەوەی حەوز لەسەر زەوی (Glute Bridges)', englishName: 'Glute Bridges', sets: wantGlutes ? setsMain + 1 : setsSec, reps: '15-20', rest: restSec + 's', muscle: 'سمت' },
+    { name: hasDumbbells ? 'بەرزبوونەوە لەسەر پەنجەی پێ بە دەمبڵ' : 'بەرزبوونەوەی پوز', englishName: hasDumbbells ? 'Dumbbell Calf Raises' : 'Bodyweight Standing Calf Raise', sets: wantCalves ? setsMain + 1 : setsMain, reps: '15-20', rest: restSec + 's', muscle: 'پوز' }
   ] : [
     { 
       name: hasKnee ? 'قاچ پرێس (پێیەکان بەرز بۆ پاراستنی ئەژنۆ)' : 'سکوات بە باڕبێڵ لەسەر شان', 
       englishName: hasKnee ? 'Leg Press (High Stance - Knee Safe)' : 'Barbell Back Squat', 
-      sets: setsMain, 
+      sets: legSets, 
       reps: hasKnee ? '12-15' : repsMain, 
       rest: restSec + 's',
       muscle: 'چوار سەرەی ڕان' 
@@ -487,12 +615,12 @@ export function generateAiScientificProgram({ weight = 78, targetWeight = 84, ta
       muscle: 'پشتی ڕان' 
     },
     { 
-      name: hasKnee ? 'دابەزین لەسەر ستیپ بۆ بەهێزکردنی ماسولکەی VMOی ئەژنۆ' : 'ڕۆمانیەن دێدلیفت بە دەمبڵ', 
-      englishName: hasKnee ? 'VMO Step Downs (Knee Rehab)' : 'Dumbbell Romanian Deadlift', 
-      sets: setsSec, 
+      name: hasKnee ? 'دابەزین لەسەر ستیپ بۆ بەهێزکردنی ماسولکەی VMOی ئەژنۆ' : (hasBack ? 'قاچ پرێس بە کێشی مامناوەند (پاراستنی پشت)' : 'ڕۆمانیەن دێدلیفت بە دەمبڵ'), 
+      englishName: hasKnee ? 'VMO Step Downs (Knee Rehab)' : (hasBack ? 'Leg Press Machine' : 'Dumbbell Romanian Deadlift'), 
+      sets: legSets, 
       reps: hasKnee ? '15 هەر لایەک' : repsSec, 
       rest: restSec + 's',
-      muscle: hasKnee ? 'پاراستنی ئەژنۆ' : 'پشتی قاچ و کڵۆت' 
+      muscle: hasKnee ? 'پاراستنی ئەژنۆ' : 'پشتی قاچ و سمت' 
     },
     { 
       name: hasKnee ? 'سۆڵە بە وەستان لەسەر ستیپ' : 'لێگ ئێکس تێنشن بە ئامێر', 
@@ -506,120 +634,136 @@ export function generateAiScientificProgram({ weight = 78, targetWeight = 84, ta
 
   // Shoulders & Arms
   const exShouldersArms = isHome ? [
-    { name: hasDumbbells ? 'شان بەرزکردنەوە بۆ لا تەنیشت بە دەمبڵ' : 'شناوی پایک بۆ شان (Pike Push-ups)', englishName: hasDumbbells ? 'Dumbbell Lateral Raise' : 'Pike Push-ups', sets: setsMain, reps: '12-15', rest: restSec + 's', muscle: 'تەنیشتی شان' },
-    { name: hasDumbbells ? 'هامر کێرڵ بە دەمبڵ' : 'بایسێپس بە بەرگری خاولی', englishName: hasDumbbells ? 'Dumbbell Hammer Curl' : 'Towel Bicep Curls', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس' },
-    { name: hasDumbbells ? 'ترایسێپس بە پشتەسەر بە دەمبڵ' : 'پاشەملە لەسەر کورسی (Bench Dips)', englishName: hasDumbbells ? 'Dumbbell Triceps Extension' : 'Bench Dips', sets: setsSec, reps: '12-15', rest: restSec + 's', muscle: 'ترایسێپس' },
+    { name: hasDumbbells ? 'شان بەرزکردنەوە بۆ لا تەنیشت بە دەمبڵ' : 'شناوی پایک بۆ شان (Pike Push-ups)', englishName: hasDumbbells ? 'Dumbbell Lateral Raise' : 'Pike Push-ups', sets: shoulderSets, reps: '12-15', rest: restSec + 's', muscle: 'تەنیشتی شان' },
+    { name: hasDumbbells ? 'هامر کێرڵ بە دەمبڵ' : 'کێشانی قۆڵ بە بەرگری جەستە', englishName: hasDumbbells ? 'Dumbbell Hammer Curl' : 'Bodyweight Biceps Curl', sets: armSets, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس' },
+    { name: hasDumbbells ? 'ترایسێپس بە پشتەسەر بە دەمبڵ' : 'پاشەملە لەسەر کورسی (Bench Dips)', englishName: hasDumbbells ? 'Dumbbell Triceps Extension' : 'Bench Dips', sets: armSets, reps: '12-15', rest: restSec + 's', muscle: 'ترایسێپس' },
     { name: 'پلانکی زانستی بۆ بەهێزکردنی ماسولکەی سک', englishName: 'Scientific Plank Hold', sets: setsSec, reps: '60s', rest: restSec + 's', muscle: 'سک' }
   ] : [
-    { name: 'شان بەرزکردنەوە بۆ لا تەنیشت بە کێبڵ', englishName: 'Cable Lateral Raise', sets: setsMain, reps: '12-15', rest: restSec + 's', muscle: 'تەنیشتی شان' },
-    { name: 'هامر کێرڵ بە دەمبڵ بۆ ئەستوورکردنی قۆڵ', englishName: 'Dumbbell Hammer Curl', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس و براکیالیس' },
-    { name: 'ترایسێپس بە پشتەسەر بە کێبڵ', englishName: 'Overhead Cable Triceps Extension', sets: setsSec, reps: '12', rest: restSec + 's', muscle: 'ترایسێپس' },
+    { name: 'شان بەرزکردنەوە بۆ لا تەنیشت بە کێبڵ', englishName: 'Cable Lateral Raise', sets: shoulderSets, reps: '12-15', rest: restSec + 's', muscle: 'تەنیشتی شان' },
+    { name: 'هامر کێرڵ بە دەمبڵ بۆ ئەستوورکردنی قۆڵ', englishName: 'Dumbbell Hammer Curl', sets: armSets, reps: repsSec, rest: restSec + 's', muscle: 'بایسێپس و براکیالیس' },
+    { name: 'ترایسێپس بە پشتەسەر بە کێبڵ', englishName: 'Overhead Cable Triceps Extension', sets: armSets, reps: '12', rest: restSec + 's', muscle: 'ترایسێپس' },
     { name: 'پلانکی زانستی بۆ بەهێزکردنی ماسولکەی سک', englishName: 'Scientific Plank Hold', sets: setsSec, reps: '60s', rest: restSec + 's', muscle: 'سک' }
   ];
 
   // Full Body A
   const exFullBodyA = isHome ? [
-    { name: 'شناو (Push-ups)', englishName: 'Push-ups', sets: setsMain, reps: repsMain, rest: restSec + 's', muscle: 'سنگ' },
-    { name: 'بەرزکردنەوەی جەستە بە ئەنیشک لەسەر زەوی (Reverse Push-up)', englishName: 'Floor Reverse Push-up', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
-    { name: 'سکوات بە کێشی جەستە', englishName: 'Bodyweight Squat', sets: setsMain, reps: '15-20', rest: restSec + 's', muscle: 'قاچ' },
+    { name: 'شناو (Push-ups)', englishName: 'Push-ups', sets: chestSets, reps: repsMain, rest: restSec + 's', muscle: 'سنگ' },
+    { name: 'بەرزکردنەوەی جەستە بە ئەنیشک لەسەر زەوی (Reverse Push-up)', englishName: 'Floor Reverse Push-up', sets: backSets, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
+    { name: 'سکوات بە کێشی جەستە', englishName: 'Bodyweight Squat', sets: legSets, reps: '15-20', rest: restSec + 's', muscle: 'قاچ' },
     { name: 'پلانکی سک', englishName: 'Core Plank Hold', sets: setsSec, reps: '45s', rest: restSec + 's', muscle: 'سک' }
   ] : [
-    { name: 'پاڵەپەستۆی سنگ بە دەمبڵ', englishName: 'Flat Dumbbell Press', sets: setsMain, reps: repsMain, rest: restSec + 's', muscle: 'سنگ' },
-    { name: 'ڕاکێشانی کێبڵ بۆ پشت', englishName: 'Lat Pulldown', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
-    { name: hasKnee ? 'قاچ پرێس بە مەودای بێ فشار' : 'سکوات بە دەمبڵ', englishName: hasKnee ? 'Leg Press Safe Range' : 'Goblet Squat', sets: setsMain, reps: '12', rest: restSec + 's', muscle: 'قاچ' },
+    { name: 'پاڵەپەستۆی سنگ بە دەمبڵ', englishName: 'Flat Dumbbell Press', sets: chestSets, reps: repsMain, rest: restSec + 's', muscle: 'سنگ' },
+    { name: 'ڕاکێشانی کێبڵ بۆ پشت', englishName: 'Lat Pulldown', sets: backSets, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
+    { name: hasKnee ? 'قاچ پرێس بە مەودای بێ فشار' : 'سکوات بە دەمبڵ', englishName: hasKnee ? 'Leg Press Safe Range' : 'Goblet Squat', sets: legSets, reps: '12', rest: restSec + 's', muscle: 'قاچ' },
     { name: 'پلانکی سک', englishName: 'Core Plank Hold', sets: setsSec, reps: '45s', rest: restSec + 's', muscle: 'سک' }
   ];
 
   // Full Body B
   const exFullBodyB = isHome ? [
-    { name: 'شناوی پایک (Pike Push-ups)', englishName: 'Pike Push-ups', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'شان' },
-    { name: 'سوپەرمان (Superman Holds)', englishName: 'Superman Holds', sets: setsMain, reps: '15', rest: restSec + 's', muscle: 'پشت' },
-    { name: 'هەنگاونان بێ کێش (Lunges)', englishName: 'Bodyweight Lunges', sets: setsMain, reps: '12-15', rest: restSec + 's', muscle: 'قاچ' },
-    { name: 'پاشەملە لەسەر کورسی (Bench Dips)', englishName: 'Bench Dips', sets: setsSec, reps: '12-15', rest: restSec + 's', muscle: 'قۆڵ' }
+    { name: 'شناوی پایک (Pike Push-ups)', englishName: 'Pike Push-ups', sets: shoulderSets, reps: repsSec, rest: restSec + 's', muscle: 'شان' },
+    { name: 'سوپەرمان (Superman Holds)', englishName: 'Superman Holds', sets: backSets, reps: '15', rest: restSec + 's', muscle: 'پشت' },
+    { name: 'هەنگاونان بێ کێش (Lunges)', englishName: 'Bodyweight Lunges', sets: legSets, reps: '12-15', rest: restSec + 's', muscle: 'قاچ' },
+    { name: 'پاشەملە لەسەر کورسی (Bench Dips)', englishName: 'Bench Dips', sets: armSets, reps: '12-15', rest: restSec + 's', muscle: 'قۆڵ' }
   ] : [
-    { name: 'شان پرێس بە دەمبڵ', englishName: 'Seated Dumbbell Press', sets: setsMain, reps: '10', rest: restSec + 's', muscle: 'شان' },
-    { name: 'پاروو بە کێبڵ بە دانیشتنەوە', englishName: 'Seated Cable Row', sets: setsMain, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
-    { name: 'ڕاکێشانی پشتی قاچ بە دانیشتنەوە', englishName: 'Seated Leg Curl', sets: setsMain, reps: '12', rest: restSec + 's', muscle: 'پشتی قاچ' },
-    { name: 'قۆڵ بایسێپس کێرڵ', englishName: 'Dumbbell Biceps Curl', sets: setsSec, reps: '12', rest: restSec + 's', muscle: 'قۆڵ' }
+    { name: 'شان پرێس بە دەمبڵ', englishName: 'Seated Dumbbell Press', sets: shoulderSets, reps: '10', rest: restSec + 's', muscle: 'شان' },
+    { name: 'پاروو بە کێبڵ بە دانیشتنەوە', englishName: 'Seated Cable Row', sets: backSets, reps: repsSec, rest: restSec + 's', muscle: 'پشت' },
+    { name: 'ڕاکێشانی پشتی قاچ بە دانیشتنەوە', englishName: 'Seated Leg Curl', sets: legSets, reps: '12', rest: restSec + 's', muscle: 'پشتی قاچ' },
+    { name: 'قۆڵ بایسێپس کێرڵ', englishName: 'Dumbbell Biceps Curl', sets: armSets, reps: '12', rest: restSec + 's', muscle: 'قۆڵ' }
   ];
+
+  const finalPush = attachCustomFinishers(exPush, 'push', pace !== 'slow');
+  const finalPull = attachCustomFinishers(exPull, 'pull', true);
+  const finalLegs = attachCustomFinishers(exLegs, 'legs', pace === 'fast' || pace === 'very_fast');
+  const finalArms = attachCustomFinishers(exShouldersArms, 'arms', true);
+  const finalFullA = attachCustomFinishers(exFullBodyA, 'full', true);
+  const finalFullB = attachCustomFinishers(exFullBodyB, 'full', pace !== 'slow');
 
   let weeklyPlan = [];
   let courseTitle = '';
   let englishSubtitle = '';
   let rationale = '';
 
-  const legsDayTitle = hasKnee ? 'قاچی پارێزراو (Legs Safe Range)' : 'قاچ و سۆڵە (Legs Power)';
+  const legsDayTitle = hasKnee ? 'قاچی پارێزراو (Legs Safe Range)' : (wantGlutes ? 'قاچ و سمت (Glutes & Legs Focus)' : 'قاچ و سۆڵە (Legs Power)');
+
+  const enlargeNamesKu = resolveBodyGoalList(enlargeIds, 'ku').join('، ');
+  const shrinkNamesKu = resolveBodyGoalList(shrinkIds, 'ku').join('، ');
+  const customFocusSummary = [
+    `کێش: ${weight}کگ ← ${targetWeight}کگ`,
+    enlargeNamesKu ? `گەورەکردنی (${enlargeNamesKu})` : '',
+    shrinkNamesKu ? `تواندنەوەی (${shrinkNamesKu})` : '',
+    conditions.length > 0 ? `پاراستنی (${conditions.join('، ')})` : ''
+  ].filter(Boolean).join(' • ');
 
   const paceRationale = pace === 'slow'
-    ? 'ڕێڕەوی لەسەرخۆ و بەردەوام: پشووی ٩٠ چرکە لە نێوان سێتەکان بۆ پاراستنی جومگە و ماسولکە بە ٣ سێت.'
+    ? 'ڕێڕەوی لەسەرخۆ و بەردەوام: پشووی ٩٠ چرکە لە نێوان سێتەکان.'
     : pace === 'normal'
-    ? 'ڕێڕەوی هاوسەنگ: پشووی ٦٠ چرکە و چڕیی ستاندارد بە ٤ سێت.'
+    ? 'ڕێڕەوی هاوسەنگ: پشووی ٦٠ چرکە و چڕیی ستاندارد.'
     : pace === 'fast'
-    ? 'ڕێڕەوی خێرا و چالاک: پشووی ٤٥ چرکە و کاردیۆی زیاتر بۆ بەرزکردنەوەی میتابۆلیزم.'
-    : 'ڕێڕەوی زۆر خێرا و چڕ: پشووی ٣٥ چرکە بە فرە سێت (٥ سێت) و کاردیۆی بەردەوام بۆ زۆرترین سوتاندنی کالۆری.';
+    ? 'ڕێڕەوی خێرا و چالاک: پشووی ٤٥ چرکە و کاردیۆی زیاتر.'
+    : 'ڕێڕەوی زۆر خێرا و چڕ: پشووی ٣٥ چرکە بە فرە سێت و کاردیۆی بەردەوام.';
 
   if (selectedDaysCount === 2) {
-    courseTitle = 'کۆرسی زانستی ٢ ڕۆژە';
-    englishSubtitle = 'Full Body Split (' + pace.toUpperCase() + ')';
-    rationale = 'داڕێژراو بە چڕیی تەواو بۆ ٢ ڕۆژ لە هەفتەدا. ' + paceRationale;
+    courseTitle = `کۆرسی تایبەت (${selectedDaysCount} ڕۆژە) • ${isBulk ? 'زیادکردنی ماسولکە' : isCut ? 'سوتاندنی چەوری' : 'ڕێکخستنی جەستە'}`;
+    englishSubtitle = 'Custom Full Body Split (' + pace.toUpperCase() + ')';
+    rationale = `داڕێژراو بەپێی زانیارییەکانت (${customFocusSummary}). ` + paceRationale;
     weeklyPlan = [
-      { dayKey: 'd1', dayName: 'شەممە', focus: 'تەواوی جەستە A (Full Body Power)', estimatedCalories: 480 + paceCalBonus, isRestDay: false, exercises: attachCardio(exFullBodyA, true) },
+      { dayKey: 'd1', dayName: 'شەممە', focus: 'تەواوی جەستە A (Full Body Power)', estimatedCalories: 480 + paceCalBonus, isRestDay: false, exercises: finalFullA },
       { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'پشووی زانستی و چاکبوونەوە', isRestDay: true },
       { dayKey: 'd3', dayName: 'دووشەممە', focus: 'پشووی هایدرەیشن', isRestDay: true },
-      { dayKey: 'd4', dayName: 'سێشەممە', focus: 'تەواوی جەستە B (Full Body Hypertrophy)', estimatedCalories: 470 + paceCalBonus, isRestDay: false, exercises: attachCardio(exFullBodyB, pace !== 'slow') },
+      { dayKey: 'd4', dayName: 'سێشەممە', focus: 'تەواوی جەستە B (Full Body Hypertrophy)', estimatedCalories: 470 + paceCalBonus, isRestDay: false, exercises: finalFullB },
       { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'پشوو', isRestDay: true },
       { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'پشوو', isRestDay: true },
       { dayKey: 'd7', dayName: 'هەینی', focus: 'پشوو', isRestDay: true }
     ];
   } else if (selectedDaysCount === 3) {
-    courseTitle = 'کۆرسی زانستی ٣ ڕۆژە';
-    englishSubtitle = 'Full Body & Push / Pull (' + pace.toUpperCase() + ')';
-    rationale = 'پڕۆگرامێکی زۆر کاریگەر بۆ ٣ ڕۆژ لە هەفتەدا. ' + paceRationale;
+    courseTitle = `کۆرسی تایبەت (${selectedDaysCount} ڕۆژە) • ${isBulk ? 'زیادکردنی ماسولکە' : isCut ? 'سوتاندنی چەوری' : 'ڕێکخستنی جەستە'}`;
+    englishSubtitle = 'Custom 3-Day Split (' + pace.toUpperCase() + ')';
+    rationale = `داڕێژراو بەپێی زانیارییەکانت (${customFocusSummary}). ` + paceRationale;
     weeklyPlan = [
-      { dayKey: 'd1', dayName: 'شەممە', focus: 'سنگ، پشت و قاچ (Full Body Power)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: attachCardio(exFullBodyA, true) },
+      { dayKey: 'd1', dayName: 'شەممە', focus: 'سنگ، شان و ترایسێپس (Push Focus)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: finalPush },
       { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'پشووی زانستی', isRestDay: true },
-      { dayKey: 'd3', dayName: 'دووشەممە', focus: 'بەشی سەرەوە و قۆڵەکان (Upper & Arms)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPush, pace === 'fast' || pace === 'very_fast') },
+      { dayKey: 'd3', dayName: 'دووشەممە', focus: 'پشت، باڵ و کۆر (Pull & Core)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: finalPull },
       { dayKey: 'd4', dayName: 'سێشەممە', focus: 'پشوو', isRestDay: true },
-      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'پشت، قاچ و کۆر (Lower & Pull)', estimatedCalories: 460 + paceCalBonus, isRestDay: false, exercises: attachCardio(exLegs, true) },
+      { dayKey: 'd5', dayName: 'چوارشەممە', focus: legsDayTitle, estimatedCalories: 460 + paceCalBonus, isRestDay: false, exercises: finalLegs },
       { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'پشوو', isRestDay: true },
       { dayKey: 'd7', dayName: 'هەینی', focus: 'پشوو', isRestDay: true }
     ];
   } else if (selectedDaysCount === 5) {
-    courseTitle = 'کۆرسی زانستی ٥ ڕۆژە';
-    englishSubtitle = 'Push / Pull / Legs / Upper / Lower (' + pace.toUpperCase() + ')';
-    rationale = 'پڕۆگرامی پێشکەوتوو بۆ ٥ ڕۆژ لە هەفتەدا بە چڕی بەرز. ' + paceRationale;
+    courseTitle = `کۆرسی تایبەت (${selectedDaysCount} ڕۆژە) • ${isBulk ? 'زیادکردنی ماسولکە' : isCut ? 'سوتاندنی چەوری' : 'ڕێکخستنی جەستە'}`;
+    englishSubtitle = 'Custom 5-Day Pro Split (' + pace.toUpperCase() + ')';
+    rationale = `داڕێژراو بەپێی زانیارییەکانت (${customFocusSummary}). ` + paceRationale;
     weeklyPlan = [
-      { dayKey: 'd1', dayName: 'شەممە', focus: 'سنگ و سێ سەر (Push)', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPush, true) },
-      { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'پشت و دوو سەر (Pull)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPull, pace !== 'slow') },
+      { dayKey: 'd1', dayName: 'شەممە', focus: 'سنگ و سێ سەر (Push)', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: finalPush },
+      { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'پشت و دوو سەر (Pull)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: finalPull },
       { dayKey: 'd3', dayName: 'دووشەممە', focus: 'پشووی چاکبوونەوە', isRestDay: true },
-      { dayKey: 'd4', dayName: 'سێشەممە', focus: legsDayTitle, estimatedCalories: 490 + paceCalBonus, isRestDay: false, exercises: attachCardio(exLegs, true) },
-      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'بەشی سەرەوە (Upper Power)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: attachCardio(exShouldersArms, pace === 'fast' || pace === 'very_fast') },
-      { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'قۆڵ و سک (Arms & Core Burn)', estimatedCalories: 410 + paceCalBonus, isRestDay: false, exercises: attachCardio(exFullBodyB, pace === 'very_fast') },
+      { dayKey: 'd4', dayName: 'سێشەممە', focus: legsDayTitle, estimatedCalories: 490 + paceCalBonus, isRestDay: false, exercises: finalLegs },
+      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'شان و باڵ (Shoulders & Arms)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: finalArms },
+      { dayKey: 'd6', dayName: 'پێنجشەممە', focus: isFemale ? 'سمت، قاچ و کەمەر (Lower & Core Sculpt)' : 'تەرکیزی ماسولکە لاوازەکان و سک', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: isFemale ? finalLegs : finalFullB },
       { dayKey: 'd7', dayName: 'هەینی', focus: 'پشووی هەفتانە', isRestDay: true }
     ];
   } else if (selectedDaysCount === 6) {
-    courseTitle = 'کۆرسی زانستی ٦ ڕۆژە';
-    englishSubtitle = 'Push / Pull / Legs x2 Pro (' + pace.toUpperCase() + ')';
-    rationale = 'کۆرسی پێشکەوتووی شەش ڕۆژ لە هەفتەدا بۆ زۆرترین گەشە. ' + paceRationale;
+    courseTitle = `کۆرسی تایبەت (${selectedDaysCount} ڕۆژە) • ${isBulk ? 'زیادکردنی ماسولکە' : isCut ? 'سوتاندنی چەوری' : 'ڕێکخستنی جەستە'}`;
+    englishSubtitle = 'Custom PPL x2 Pro (' + pace.toUpperCase() + ')';
+    rationale = `داڕێژراو بەپێی زانیارییەکانت (${customFocusSummary}). ` + paceRationale;
     weeklyPlan = [
-      { dayKey: 'd1', dayName: 'شەممە', focus: 'ڕۆژی Push A (سنگ و سێ سەر)', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPush, true) },
-      { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'ڕۆژی Pull A (پشت و دوو سەر)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPull, pace !== 'slow') },
-      { dayKey: 'd3', dayName: 'دووشەممە', focus: 'ڕۆژی Legs A (' + legsDayTitle + ')', estimatedCalories: 480 + paceCalBonus, isRestDay: false, exercises: attachCardio(exLegs, true) },
-      { dayKey: 'd4', dayName: 'سێشەممە', focus: 'ڕۆژی Push B (سنگ و شان)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: attachCardio(exShouldersArms, pace === 'fast' || pace === 'very_fast') },
-      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'ڕۆژی Pull B (پشت و باڵ)', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPull, pace === 'very_fast') },
-      { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'ڕۆژی Legs B (' + legsDayTitle + ')', estimatedCalories: 470 + paceCalBonus, isRestDay: false, exercises: attachCardio(exLegs, pace === 'very_fast') },
+      { dayKey: 'd1', dayName: 'شەممە', focus: 'ڕۆژی Push A (سنگ و سێ سەر)', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: finalPush },
+      { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'ڕۆژی Pull A (پشت و دوو سەر)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: finalPull },
+      { dayKey: 'd3', dayName: 'دووشەممە', focus: 'ڕۆژی Legs A (' + legsDayTitle + ')', estimatedCalories: 480 + paceCalBonus, isRestDay: false, exercises: finalLegs },
+      { dayKey: 'd4', dayName: 'سێشەممە', focus: 'ڕۆژی Push B (شان و قۆڵ)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: finalArms },
+      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'ڕۆژی Pull B (پشت و باڵ)', estimatedCalories: 440 + paceCalBonus, isRestDay: false, exercises: finalPull },
+      { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'ڕۆژی Legs B (' + legsDayTitle + ')', estimatedCalories: 470 + paceCalBonus, isRestDay: false, exercises: finalLegs },
       { dayKey: 'd7', dayName: 'هەینی', focus: 'پشووی هەفتانە', isRestDay: true }
     ];
   } else {
-    courseTitle = 'کۆرسی زانستی ٤ ڕۆژە';
-    englishSubtitle = 'Push / Pull / Legs / Arms (' + pace.toUpperCase() + ')';
-    rationale = 'گونجاوترین دابەشکردنی زانستی بە ٤ ڕۆژ ڕاهێنان و ٣ ڕۆژ پشوو لە هەفتەدا. ' + paceRationale;
+    courseTitle = `کۆرسی تایبەت (٤ ڕۆژە) • ${isBulk ? 'زیادکردنی ماسولکە' : isCut ? 'سوتاندنی چەوری' : 'ڕێکخستنی جەستە'}`;
+    englishSubtitle = 'Custom 4-Day Split (' + pace.toUpperCase() + ')';
+    rationale = `داڕێژراو بەپێی زانیارییەکانت (${customFocusSummary}). ` + paceRationale;
     weeklyPlan = [
-      { dayKey: 'd1', dayName: 'شەممە', focus: 'سنگ و سێ سەر (Push Day)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPush, pace !== 'slow') },
-      { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'پشت و دوو سەر (Pull Day)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: attachCardio(exPull, true) },
+      { dayKey: 'd1', dayName: 'شەممە', focus: 'سنگ و سێ سەر (Push Day)', estimatedCalories: 430 + paceCalBonus, isRestDay: false, exercises: finalPush },
+      { dayKey: 'd2', dayName: 'یەکشەممە', focus: 'پشت و دوو سەر (Pull Day)', estimatedCalories: 450 + paceCalBonus, isRestDay: false, exercises: finalPull },
       { dayKey: 'd3', dayName: 'دووشەممە', focus: 'پشووی زانستی و هایدرەیشن', isRestDay: true },
-      { dayKey: 'd4', dayName: 'سێشەممە', focus: legsDayTitle, estimatedCalories: 480 + paceCalBonus, isRestDay: false, exercises: attachCardio(exLegs, pace === 'fast' || pace === 'very_fast') },
-      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'شان، قۆڵ و کۆر (Shoulders & Arms)', estimatedCalories: 420 + paceCalBonus, isRestDay: false, exercises: attachCardio(exShouldersArms, true) },
+      { dayKey: 'd4', dayName: 'سێشەممە', focus: legsDayTitle, estimatedCalories: 480 + paceCalBonus, isRestDay: false, exercises: finalLegs },
+      { dayKey: 'd5', dayName: 'چوارشەممە', focus: 'شان، قۆڵ و کۆر (Shoulders & Arms)', estimatedCalories: 420 + paceCalBonus, isRestDay: false, exercises: finalArms },
       { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'پشووی زانستی و گەشەی ماسولکە', isRestDay: true },
       { dayKey: 'd7', dayName: 'هەینی', focus: 'پشووی هەفتانە و چاکبوونەوە', isRestDay: true }
     ];
@@ -630,6 +774,8 @@ export function generateAiScientificProgram({ weight = 78, targetWeight = 84, ta
     title: courseTitle,
     englishSubtitle: englishSubtitle,
     goalPace: pace,
+    trainingLocation: location,
+    homeEquipment: equipment,
     restIntervalSeconds: restSec,
     daysPerWeek: selectedDaysCount,
     durationDays: targetDays || 45,
