@@ -45,3 +45,7 @@ next-env.d.ts
 /android/app/build/
 /ios/App/App/public/_next/
 /android/app/src/main/assets/public/_next/
+
+*.zip
+*.ipa
+extracted_v51/

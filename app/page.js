@@ -1,15 +1,17 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
-import { Camera, Utensils, Drumstick, Apple, Coffee, Bean, Flame, Ruler, Calculator, Check, MessageCircle, Zap, Sparkles, Dumbbell, Droplet, Target, Trophy, UtensilsCrossed, Clipboard, Salad, BicepsFlexed, Milk, Bandage, Hand, Egg, Fish, Beef, Cookie, Banana, Hamburger, Calendar, Bot, PersonStanding, X, Wheat, RefreshCw, Scale, User, ThumbsUp, Mic, AlertTriangle, Lightbulb, CalendarDays, MapPin, Settings, Palette, Moon, Sun, Globe, Pencil, Search, Timer, Play, Pause, RotateCcw, Printer, Download, Bell, Plus, Minus, Info, CheckCircle2, Video, Trash2, LogOut, Phone, Cloud, Volume2, VolumeX, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, SlidersHorizontal, Filter, Pill, Repeat } from 'lucide-react';
+import { Camera, Utensils, Drumstick, Apple, Coffee, Bean, Flame, Ruler, Calculator, Check, MessageCircle, Zap, Sparkles, Dumbbell, Droplet, Target, Trophy, UtensilsCrossed, Clipboard, Salad, BicepsFlexed, Milk, Bandage, Hand, Egg, Fish, Beef, Cookie, Banana, Hamburger, Calendar, Bot, PersonStanding, X, Wheat, RefreshCw, Scale, User, ThumbsUp, Mic, AlertTriangle, Lightbulb, CalendarDays, MapPin, Settings, Palette, Moon, Sun, Globe, Pencil, Search, Timer, Play, Pause, RotateCcw, Printer, Download, Bell, Plus, Minus, Info, CheckCircle2, Video, Trash2, LogOut, Phone, Cloud, Volume2, VolumeX, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, SlidersHorizontal, Filter, Pill, Repeat, ShieldCheck, ShieldAlert } from 'lucide-react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 const MuscleAnatomy3D = dynamic(() => import('./components/MuscleAnatomy3D'), { ssr: false });
 const CameraScanner = dynamic(() => import('./components/CameraScanner'), { ssr: false });
 const PhysiqueScannerModal = dynamic(() => import('./components/PhysiqueScannerModal'), { ssr: false });
+const AdminDashboardModal = dynamic(() => import('./components/AdminDashboardModal'), { ssr: false });
 import ExerciseThumbnail from './components/ExerciseThumbnail';
 import { cacheWorkoutPlanMedia, getExerciseMediaUrl } from './utils/exerciseMedia';
 import { safeStorage } from './utils/safeStorage';
 import { auth, db, googleProvider } from '../lib/firebase';
+import { uploadPhysiquePhotos, subscribeToAthleteStatus } from './utils/cloudSync';
 import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import * as audioFX from './utils/audioFX';
@@ -1429,10 +1431,28 @@ export default function App() {
   // دۆخی مۆداڵی شیکاری بینینی جەستە بە زیرەکی دەستکرد (AI Physique Vision Scanner)
   const [showPhysiqueModal, setShowPhysiqueModal] = useState(false);
 
+  // دۆخی مۆداڵی بەڕێوەبەری و ڕاهێنەر (Master Admin Dashboard)
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  // دۆخی قفڵکردنی ئەپ لە دوورەوە (Remote Kill-Switch / Suspend)
+  const [isAppSuspended, setIsAppSuspended] = useState(false);
+  const [appSuspendReason, setAppSuspendReason] = useState('');
+
   const handlePhysiqueAnalyzed = async (analysisResult, capturedImages) => {
+    // ئەپلۆدکردنی وێنەکان بۆ کلاود ستۆریج تا ڕاهێنەر بتوانێت بیانبینێت
+    let photoUrls = null;
+    try {
+      const athleteUid = authUser?.uid || profile?.id || 'athlete_' + (profile?.name || 'guest');
+      photoUrls = await uploadPhysiquePhotos(athleteUid, capturedImages);
+    } catch (uploadErr) {
+      console.warn("Photo upload warning:", uploadErr);
+    }
+
     const updatedProfile = {
       ...profile,
-      physiqueAnalysis: analysisResult,
+      physiqueAnalysis: {
+        ...analysisResult,
+        photos: photoUrls || analysisResult?.photos || null
+      },
       lastPhysiqueScan: new Date().toLocaleDateString()
     };
     setProfile(updatedProfile);
@@ -1915,6 +1935,7 @@ export default function App() {
 
   // ==================== پاڵپشتی دوگمەی گەڕانەوەی مۆبایل (Android Back Button / History PopState) ====================
   const isAnyModalOpen = Boolean(
+    showAdminModal ||
     showPhysiqueModal ||
     showScanModal ||
     showEditProfileModal ||
@@ -1945,6 +1966,7 @@ export default function App() {
     }
 
     const handleBackNavigation = () => {
+      if (showAdminModal) { setShowAdminModal(false); return; }
       if (showPhysiqueModal) { setShowPhysiqueModal(false); return; }
       if (exerciseSwapModalData) { setExerciseSwapModalData(null); return; }
       if (exerciseToSwapConfirm) { setExerciseToSwapConfirm(null); return; }
@@ -1976,7 +1998,7 @@ export default function App() {
     showSettingsModal, showAiDietModal, showHomeMealsModal,
     showNutritionHistoryModal, showLogoutConfirmModal, showResetModal,
     exerciseToSwapConfirm, exerciseSwapModalData, showSupplementsModal,
-    showPhysiqueModal
+    showPhysiqueModal, showAdminModal
   ]);
 
   // دۆخی بینینی ڕاهێنانەکان لە تابی راهێنان (Compact List vs Large icons)
@@ -3020,6 +3042,10 @@ export default function App() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
+            if (data.isSuspended !== undefined || data.status === 'suspended') {
+              setIsAppSuspended(Boolean(data.isSuspended || data.status === 'suspended'));
+            }
+            if (data.suspendReason) setAppSuspendReason(data.suspendReason);
             if (data.profile) setProfile(data.profile);
             if (data.dietMeals) setDietMeals(data.dietMeals);
             if (data.workoutCourse) setWorkoutCourse(data.workoutCourse);
@@ -3057,6 +3083,12 @@ export default function App() {
       try {
         const payload = safeSerialize({
           profile,
+          athleteId: authUser.uid,
+          name: profile?.name || authUser.displayName || 'یاریزانی BQ GYM',
+          phone: profile?.phone || authUser.phoneNumber || '',
+          email: authUser.email || '',
+          isSuspended: isAppSuspended,
+          status: isAppSuspended ? 'suspended' : 'active',
           dietMeals,
           workoutCourse,
           courseHistory: (courseHistory || []).filter(c => c !== null),
@@ -3080,7 +3112,23 @@ export default function App() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [authUser, profile, dietMeals, workoutCourse, courseHistory, coachMemory, hasCompletedOnboarding, chatMessages, exerciseLogs, waterMl, completedDayIndices, aiCustomFoods, theme, colorTheme, language]);
+  }, [authUser, profile, dietMeals, workoutCourse, courseHistory, coachMemory, hasCompletedOnboarding, chatMessages, exerciseLogs, waterMl, completedDayIndices, aiCustomFoods, theme, colorTheme, language, isAppSuspended]);
+
+  // گوێگرتنی ڕاستەوخۆ بۆ دۆخی قفڵکردنی مۆبایل و گۆڕانکارییەکانی ڕاهێنەر
+  useEffect(() => {
+    if (!authUser?.uid) return;
+    const unsub = subscribeToAthleteStatus(authUser.uid, ({ isSuspended, suspendReason, updatedWorkoutCourse }) => {
+      setIsAppSuspended(isSuspended);
+      if (suspendReason) setAppSuspendReason(suspendReason);
+      if (updatedWorkoutCourse) {
+        setWorkoutCourse(updatedWorkoutCourse);
+        try {
+          localStorage.setItem('kurd_fit_course_v5', JSON.stringify(updatedWorkoutCourse));
+        } catch (e) {}
+      }
+    });
+    return () => unsub();
+  }, [authUser]);
 
   // ژماردنی کۆی کالۆری و ماکرۆکان
   const allMealItems = dietMeals[selectedDayIdx] ? Object.values(dietMeals[selectedDayIdx]).flat().filter(item => item.isEaten) : [];
@@ -8395,6 +8443,55 @@ Rules:
             )}
           </div>
 
+          {/* ==================== پەنێڵی بەڕێوەبەری و ڕاهێنەر (Master Coach Panel) ==================== */}
+          <div style={{ marginTop: '16px', marginBottom: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setShowAdminModal(true)}
+              className="liquid-card"
+              style={{
+                width: '100%',
+                padding: '14px 18px',
+                borderRadius: '18px',
+                background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.18) 0%, rgba(59, 130, 246, 0.15) 100%)',
+                border: '1.5px solid rgba(168, 85, 247, 0.45)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                boxShadow: '0 4px 20px rgba(147, 51, 234, 0.2)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(147, 51, 234, 0.4)'
+                }}>
+                  <ShieldCheck size={20} color="#ffffff" />
+                </div>
+                <div style={{ textAlign: currentLangConfig.dir === 'rtl' ? 'right' : 'left' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#ffffff' }}>
+                    {language === 'en' ? 'Master Coach & Admin Panel' : 'پەنێڵی بەڕێوەبەری و ڕاهێنەر'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                    {language === 'en' ? 'Manage Athletes, Photos & Workout Courses' : 'کۆنتڕۆڵی یاریزانان، وێنەکانی جەستە، و کۆرسەکان'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#A855F7', fontWeight: '800' }}>
+                {currentLangConfig.dir === 'rtl' ? 'کردنەوە ←' : 'Open →'}
+              </div>
+            </button>
+          </div>
+
           {/* ==================== دوگمەی سوور بۆ ڕێستکردنەوەی تەواوی بەرنامەکە ==================== */}
           <div style={{ marginTop: '28px', paddingTop: '14px', borderTop: '1px solid rgba(239, 68, 68, 0.25)' }}>
             <button
@@ -11956,6 +12053,76 @@ Rules:
         currentLangConfig={currentLangConfig}
         profile={profile}
         onPhysiqueAnalyzed={handlePhysiqueAnalyzed}
+      />
+
+      {/* ==================== شاشەی قفڵکردنی ئەپڵیکەیشن لە دوورەوە (Remote Kill-Switch Lock Screen) ==================== */}
+      {isAppSuspended && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 7, 15, 0.98)',
+          zIndex: 999999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          textAlign: 'center',
+          direction: 'rtl'
+        }}>
+          <div style={{
+            maxWidth: '380px',
+            width: '100%',
+            background: 'linear-gradient(145deg, rgba(30, 27, 75, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
+            border: '2px solid rgba(239, 68, 68, 0.5)',
+            borderRadius: '24px',
+            padding: '36px 24px',
+            boxShadow: '0 20px 60px rgba(239, 68, 68, 0.25)'
+          }}>
+            <div style={{
+              width: '70px',
+              height: '70px',
+              borderRadius: '22px',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '2px solid #ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px auto',
+              color: '#ef4444'
+            }}>
+              <ShieldAlert size={36} />
+            </div>
+
+            <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#ffffff', margin: '0 0 8px 0' }}>
+              هەژمارەکەت ڕاگیراوە
+            </h2>
+
+            <p style={{ fontSize: '14px', color: '#cbd5e1', lineHeight: '1.6', margin: '0 0 20px 0' }}>
+              {appSuspendReason || 'ئەم ئەپڵیکەیشنە لەلایەن ڕاهێنەرەوە ڕاگیراوە. تکایە بۆ چالاککردنەوە پەیوەندی بە بەڕێوەبەرایەتی هۆڵی BQ GYM بکە.'}
+            </p>
+
+            <div style={{
+              padding: '12px',
+              borderRadius: '12px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              fontSize: '12px',
+              color: '#94a3b8'
+            }}>
+              BQ GYM Security System • دۆخ: قفڵکراوە
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== مۆداڵی بەڕێوەبەری و ڕاهێنەر (Master Admin Dashboard Modal) ==================== */}
+      <AdminDashboardModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
       />
 
       {/* ==================== هێڵی خوارەوە (Luminous Purple-Blue Liquid Glass Bottom Bar) ==================== */}
