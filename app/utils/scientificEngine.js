@@ -183,6 +183,16 @@ if (typeof window !== "undefined") window.generateWorkoutDirectly = async (profi
    const supplementsText = Array.isArray(profile?.supplements) && profile.supplements.length > 0 ? profile.supplements.join(', ') : 'None (Natural)';
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani)';
 
+   const physique = profile?.physiqueAnalysis || null;
+   const physiqueInfo = physique ? `
+- AI Vision Physique Scan Findings:
+  * Estimated Body Fat: ${physique.bodyFatPercentage || 'N/A'}%
+  * Somatotype / Body Type: ${physique.bodyType || 'N/A'}
+  * Visually Lagging Muscle Groups (TOP PRIORITY TO DEVELOP): ${(physique.laggingMuscles || []).join(', ') || 'None'}
+  * Well-Developed Muscles: ${(physique.strongMuscles || []).join(', ') || 'Balanced'}
+  * Posture & Symmetry Notes: ${physique.postureFeedback || 'Symmetric'}
+` : '';
+
    const homeRules = isHome ? `
 CRITICAL RULES FOR HOME WORKOUT:
 - DO NOT invent improvised household items (NEVER use words like "Backpack", "Water bottle", "Couch", "Towel", "Broom").
@@ -211,13 +221,15 @@ Design a strictly personalized ${days}-day weekly workout program in ${langName}
 - Training Days: ${days} days per week (${7 - days} rest days)
 - Location: ${isHome ? 'Home Workout' : 'Gym'}${equipment ? ` (Available Equipment: ${equipment})` : ''}
 - Injuries / Health Conditions: ${(profile?.healthConditions || []).join(', ') || 'None'}
+${physiqueInfo}
 ${homeRules}
 
 PERSONALIZATION REQUIREMENTS:
 1. You MUST tailor the weekly split, exercise selection, sets, reps, and rest periods directly to the athlete's gender (${genderLabel}), age (${ageVal}), weight (${weightVal}kg -> ${targetWeightVal}kg), supplements/hormones (${supplementsText}), and priority body goals (Enlarge: ${enlargeText || 'Balanced'}, Shrink: ${shrinkText || 'None'}).
 2. Give extra volume (+1 exercise or +1 set) to the priority muscles in "Enlarge", and include targeted high-rep metabolic/core/toning exercises for areas in "Shrink". If the athlete uses Creatine, Pre-Workout, Proteins, or Hormones, optimize work volume and recovery accordingly.
-3. Strictly avoid any exercise that stresses the listed injuries (${(profile?.healthConditions || []).join(', ') || 'None'}).
-4. In "rationale", write a clear 1-2 sentence explanation in ${langName} mentioning the athlete's weight (${weightVal}kg -> ${targetWeightVal}kg), supplements (${supplementsText}), and selected focus muscles so they see the program is custom-built for them.
+${physique && physique.laggingMuscles && physique.laggingMuscles.length > 0 ? `3. AI PHYSIQUE SCAN VISUAL INTEGRATION: The athlete's physique was scanned by AI camera vision. Visually lagging muscle groups are: ${physique.laggingMuscles.join(', ')}. You MUST give direct priority to these lagging muscle groups across the training week (positioning them early in the workouts, adding targeted hypertrophic variation and adequate volume to bring up lagging areas).` : ''}
+4. Strictly avoid any exercise that stresses the listed injuries (${(profile?.healthConditions || []).join(', ') || 'None'}).
+5. In "rationale", write a clear 1-2 sentence explanation in ${langName} mentioning the athlete's weight (${weightVal}kg -> ${targetWeightVal}kg), supplements (${supplementsText}), and selected focus muscles (including any AI-scanned lagging muscles) so they see the program is custom-built for them.
 
 Return ONLY a valid JSON object matching this exact structure:
 {
@@ -378,7 +390,8 @@ export function calculateScientificGoalByAi({
   goal = '', 
   goalPace = 'normal',
   healthConditions = [],
-  supplements = []
+  supplements = [],
+  physiqueAnalysis = null
 }) {
   const currentWeight = Number(weight) || 78;
   const currentHeight = Number(height) || 178;
@@ -527,6 +540,17 @@ export function calculateScientificGoalByAi({
   if (hasFatBurner) baseWaterMl += 400;
   const calculatedWaterMl = Math.max(2500, Math.min(6000, Math.round(baseWaterMl / 100) * 100));
 
+  // کاتێک سکانی بینینی جەستە (AI Physique Vision) ئەنجامدراوە
+  if (physiqueAnalysis && typeof physiqueAnalysis === 'object') {
+    if (physiqueAnalysis.recommendedCalories && Number(physiqueAnalysis.recommendedCalories) >= 1200) {
+      calculatedCalories = Math.round(Number(physiqueAnalysis.recommendedCalories));
+    }
+    if (physiqueAnalysis.recommendedProtein && Number(physiqueAnalysis.recommendedProtein) >= 60) {
+      calculatedProtein = Math.round(Number(physiqueAnalysis.recommendedProtein));
+    }
+    calculatedCarbs = Math.max(50, Math.round((calculatedCalories - (calculatedProtein * 4) - (calculatedFat * 9)) / 4));
+  }
+
   return {
     targetWeight: currentTargetWeight,
     targetDays: computedDays,
@@ -541,7 +565,7 @@ export function calculateScientificGoalByAi({
 }
 
 // ==================== مەکینەی زانستی داڕشتنی کۆرس بەپێی دۆخی ڕاستەقینەی بەکارهێنەر ====================
-export function generateAiScientificProgram({ weight = 78, targetWeight = 84, targetDays = 45, age = 23, gender = 'male', goal = '', goalPace = 'normal', bodyGoals = { enlarge: [], shrink: [] }, healthConditions = [] }, selectedDaysCount = 4, location = 'gym', equipment = '') {
+export function generateAiScientificProgram({ weight = 78, targetWeight = 84, targetDays = 45, age = 23, gender = 'male', goal = '', goalPace = 'normal', bodyGoals = { enlarge: [], shrink: [] }, healthConditions = [], physiqueAnalysis = null }, selectedDaysCount = 4, location = 'gym', equipment = '') {
   const conditions = healthConditions || [];
   const hasKnee = conditions.some(c => c.includes('ئەژنۆ') || c.toLowerCase().includes('knee'));
   const hasBack = conditions.some(c => c.includes('پشت') || c.toLowerCase().includes('back') || c.includes('دیسک'));
@@ -554,14 +578,22 @@ export function generateAiScientificProgram({ weight = 78, targetWeight = 84, ta
   const enlargeIds = Array.isArray(bodyGoals?.enlarge) ? bodyGoals.enlarge : [];
   const shrinkIds = Array.isArray(bodyGoals?.shrink) ? bodyGoals.shrink : [];
 
-  const wantChest = enlargeIds.some(x => x === 'm1' || x === 'f1' || String(x).includes('سنگ'));
-  const wantShoulders = enlargeIds.some(x => x === 'm2' || String(x).includes('شان'));
-  const wantBack = enlargeIds.some(x => x === 'm3' || x === 'f7' || String(x).includes('پشت'));
-  const wantArms = enlargeIds.some(x => x === 'm4' || x === 'f6' || String(x).includes('باڵ') || String(x).includes('قۆڵ'));
+  const lagging = (physiqueAnalysis?.laggingMuscles || []).map(m => String(m).toLowerCase());
+  const lagChest = lagging.some(m => m.includes('سنگ') || m.includes('chest'));
+  const lagDelts = lagging.some(m => m.includes('شان') || m.includes('delt') || m.includes('shoulder'));
+  const lagBack = lagging.some(m => m.includes('پشت') || m.includes('back') || m.includes('lat'));
+  const lagArms = lagging.some(m => m.includes('باڵ') || m.includes('قۆڵ') || m.includes('arm') || m.includes('bicep') || m.includes('tricep'));
+  const lagLegs = lagging.some(m => m.includes('قاچ') || m.includes('ڕان') || m.includes('leg') || m.includes('quad'));
+  const lagCore = lagging.some(m => m.includes('ورگ') || m.includes('کۆڕ') || m.includes('abs') || m.includes('core'));
+
+  const wantChest = enlargeIds.some(x => x === 'm1' || x === 'f1' || String(x).includes('سنگ')) || lagChest;
+  const wantShoulders = enlargeIds.some(x => x === 'm2' || String(x).includes('شان')) || lagDelts;
+  const wantBack = enlargeIds.some(x => x === 'm3' || x === 'f7' || String(x).includes('پشت')) || lagBack;
+  const wantArms = enlargeIds.some(x => x === 'm4' || x === 'f6' || String(x).includes('باڵ') || String(x).includes('قۆڵ')) || lagArms;
   const wantGlutes = enlargeIds.some(x => x === 'f4' || String(x).includes('سمت')) || (isFemale && !enlargeIds.length);
-  const wantLegs = enlargeIds.some(x => x === 'm6' || x === 'f5' || String(x).includes('ڕان') || String(x).includes('قاچ'));
+  const wantLegs = enlargeIds.some(x => x === 'm6' || x === 'f5' || String(x).includes('ڕان') || String(x).includes('قاچ')) || lagLegs;
   const wantCalves = enlargeIds.some(x => x === 'm7' || String(x).includes('پوز'));
-  const shrinkCore = shrinkIds.some(x => ['m5', 'f2', 'f3'].includes(x) || String(x).includes('ورگ') || String(x).includes('کەمەر')) || isCut;
+  const shrinkCore = shrinkIds.some(x => ['m5', 'f2', 'f3'].includes(x) || String(x).includes('ورگ') || String(x).includes('کەمەر')) || isCut || lagCore;
   const shrinkLower = shrinkIds.some(x => ['m6', 'f4', 'f5'].includes(x));
 
   // ڕێکخستنی کاتی پشوو و سێت و دووبارە بەپێی خێرایی (Pace) و تەمەن
@@ -877,6 +909,10 @@ export function generateAiScientificProgram({ weight = 78, targetWeight = 84, ta
       { dayKey: 'd6', dayName: 'پێنجشەممە', focus: 'پشووی زانستی و گەشەی ماسولکە', isRestDay: true },
       { dayKey: 'd7', dayName: 'هەینی', focus: 'پشووی هەفتانە و چاکبوونەوە', isRestDay: true }
     ];
+  }
+
+  if (physiqueAnalysis?.laggingMuscles && physiqueAnalysis.laggingMuscles.length > 0) {
+    rationale = `ئەم بەرنامەیە بە شیکاری بینینی جەستە (AI Physique Vision) و بە لەبەرچاوگرتنی ماسولکە دواکەوتووەکانت (${physiqueAnalysis.laggingMuscles.join('، ')}) دارێژراوە. ` + rationale;
   }
 
   return {

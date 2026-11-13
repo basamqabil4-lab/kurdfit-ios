@@ -362,3 +362,75 @@ export const playDeleteSound = (soundEnabled = true) => {
     osc.stop(now + 0.07);
   } catch (e) {}
 };
+
+// =========================================================================
+// AI Physique Scanner: Shutter & Pose Alignment Sound Effects
+// =========================================================================
+
+export const playPoseAlignedSound = (soundEnabled = true) => {
+  triggerHaptic(20);
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, now); // D5 tone
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  } catch (e) {}
+};
+
+export const playCaptureSuccessSound = (soundEnabled = true) => {
+  triggerHaptic([40, 50, 120]);
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 1. Camera Shutter Click (Noise burst)
+    const bufferSize = Math.floor(ctx.sampleRate * 0.045);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(1400, now);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.28, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+
+    // 2. Uplifting Success Chime (G5 -> C6 -> E6 harmonic triad)
+    const notes = [783.99, 1046.50, 1318.51];
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      const startT = now + 0.05 + idx * 0.065;
+      osc.frequency.setValueAtTime(freq, startT);
+      gain.gain.setValueAtTime(0.001, startT);
+      gain.gain.linearRampToValueAtTime(0.22, startT + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startT + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startT);
+      osc.stop(startT + 0.28);
+    });
+  } catch (e) {}
+};

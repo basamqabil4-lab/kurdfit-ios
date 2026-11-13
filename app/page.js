@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import dynamic from 'next/dynamic';
 const MuscleAnatomy3D = dynamic(() => import('./components/MuscleAnatomy3D'), { ssr: false });
 const CameraScanner = dynamic(() => import('./components/CameraScanner'), { ssr: false });
+const PhysiqueScannerModal = dynamic(() => import('./components/PhysiqueScannerModal'), { ssr: false });
 import ExerciseThumbnail from './components/ExerciseThumbnail';
 import { cacheWorkoutPlanMedia, getExerciseMediaUrl } from './utils/exerciseMedia';
 import { safeStorage } from './utils/safeStorage';
@@ -199,6 +200,32 @@ if (typeof window !== "undefined") window.generatePlanDirectly = async (profile,
    const supplementsText = Array.isArray(profile?.supplements) && profile.supplements.length > 0 ? profile.supplements.join(', ') : 'None';
    const prompt = `Generate a healthy 7-day diet plan strictly in ${langName} script matching approx ${goalCalories} kcal per day. Diet style: ${dietType}. Athlete weight: ${profile?.weight || 75}kg -> Target: ${profile?.targetWeight || 80}kg. Athlete supplements used: ${supplementsText} (if they use Whey Protein, Mass Gainer, Creatine, etc., integrate appropriate meals/shakes into their daily plan). All food names ("name") and units ("unit") MUST be written in ${langName} (NO Latin/English letters for Kurdish/Arabic/Persian). Use "مل" or "گڵاس" for liquids/drinks and "گرام", "قاپ", or "دانە" for solid foods. Also provide "englishName" in English. Return ONLY a JSON array of exactly 7 objects, each with breakfast, lunch, snack, dinner arrays of foods. Format of food: {id, name, englishName, calories, protein, carbs, fat, icon, quantity, unit}. DO NOT ADD MARKDOWN.`;
    const resText = await window.callGeminiAPI(prompt);
+   return JSON.parse(cleanJsonText(resText));
+};
+
+if (typeof window !== "undefined") window.analyzePhysiqueDirectly = async (frontBase64, sideBase64, backBase64, profile = {}, lang = 'ku') => {
+   const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani - کوردی سۆرانی)';
+   const athleteContext = `Athlete stats: Age: ${profile?.age || 23}, Gender: ${profile?.gender || 'male'}, Weight: ${profile?.weight || 75}kg, Height: ${profile?.height || 175}cm, Goal: ${profile?.goal || 'Fitness'}, Supplements: ${(profile?.supplements || []).join(', ') || 'None'}`;
+   
+   const prompt = `You are a world-class elite sports kinesiologist, physique evaluator, and competitive bodybuilding coach.
+Carefully examine the athlete's physique image(s) (Front pose, Side profile, and Back pose). Note: Face may be concealed for privacy.
+${athleteContext}
+
+Analyze the physique visually with scientific rigor and return a JSON object with:
+1. "bodyFatPercentage": (number, realistic visual estimation based on definition, e.g. 15.5)
+2. "bodyType": (string in ${langName}, e.g. "مێزۆمۆرف (وەرزشی)" or "ئیکتۆمۆرف (باریک)" or "ئیندۆمۆرف (پڕ)")
+3. "muscleMassLevel": (string in ${langName}, assessment of muscular development)
+4. "laggingMuscles": (array of 2 to 4 muscle groups in ${langName} that visibly lag behind and need extra volume/development, e.g. ["سینگی سەرەوە (Incline Chest)", "شانی لاوەکی (Lateral Delts)", "پشتی فراوان (Lats Width)", "ماسولکەکانی ورگ و کۆڕ (Core/Abs)"])
+5. "strongMuscles": (array of 2 to 3 well-developed muscle groups in ${langName})
+6. "postureFeedback": (string in ${langName}, 1-2 sentences on symmetry, balance, and posture)
+7. "recommendedCalories": (number, scientifically calibrated target daily calories for their visual body fat and goal)
+8. "recommendedProtein": (number, daily protein in grams, e.g. 160)
+9. "workoutFocusText": (string in ${langName}, 1-2 sentences detailing how their workout course should prioritize their lagging muscles)
+
+RESPOND ONLY IN PURE VALID JSON. NO MARKDOWN, NO EXPLANATIONS.`;
+
+   const primaryImage = frontBase64 || sideBase64 || backBase64;
+   const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.", null, primaryImage, SCAN_GEMINI_MODELS);
    return JSON.parse(cleanJsonText(resText));
 };
 
@@ -1399,6 +1426,46 @@ export default function App() {
   // دۆخی فلتەری پۆلەکانی خۆراک لە سەرەوەی بانکی خۆراک
   const [showFoodCategoryFilter, setShowFoodCategoryFilter] = useState(false);
 
+  // دۆخی مۆداڵی شیکاری بینینی جەستە بە زیرەکی دەستکرد (AI Physique Vision Scanner)
+  const [showPhysiqueModal, setShowPhysiqueModal] = useState(false);
+
+  const handlePhysiqueAnalyzed = async (analysisResult, capturedImages) => {
+    const updatedProfile = {
+      ...profile,
+      physiqueAnalysis: analysisResult,
+      lastPhysiqueScan: new Date().toLocaleDateString()
+    };
+    setProfile(updatedProfile);
+
+    try {
+      localStorage.setItem('kurd_fit_profile_v5', JSON.stringify(updatedProfile));
+    } catch (e) {}
+
+    if (analysisResult.recommendedCalories) {
+      setProfileGoals(prev => ({
+        ...prev,
+        calories: analysisResult.recommendedCalories,
+        proteins: analysisResult.recommendedProtein || prev.proteins
+      }));
+    }
+
+    if (analysisResult.laggingMuscles && analysisResult.laggingMuscles.length > 0) {
+      try {
+        setActionLoadingState({ active: true, message: 'خەریکی داڕشتنەوەی کۆرسی ڕاهێنانە بەپێی ماسولکە لاوازەکانی لەشت...' });
+        const currentDays = workoutCourse?.weeklyPlan?.length || 4;
+        const newCourse = await window.generateWorkoutDirectly(updatedProfile, currentDays, workoutCourse?.location || 'gym', language);
+        if (newCourse && newCourse.weeklyPlan) {
+          setWorkoutCourse(newCourse);
+        }
+      } catch (err) {
+        console.warn("Failed to auto-regenerate course after physique scan:", err);
+      } finally {
+        setActionLoadingState({ active: false, message: '' });
+      }
+    }
+    playSparkleSound();
+  };
+
   // دۆخی کیبۆردی مۆبایل بۆ ڕاهێنەری زیرەک و شاردنەوەی هێڵی خوارەوە
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [isChatInputFocused, setIsChatInputFocused] = useState(false);
@@ -1848,6 +1915,7 @@ export default function App() {
 
   // ==================== پاڵپشتی دوگمەی گەڕانەوەی مۆبایل (Android Back Button / History PopState) ====================
   const isAnyModalOpen = Boolean(
+    showPhysiqueModal ||
     showScanModal ||
     showEditProfileModal ||
     showAuthModal ||
@@ -1877,6 +1945,7 @@ export default function App() {
     }
 
     const handleBackNavigation = () => {
+      if (showPhysiqueModal) { setShowPhysiqueModal(false); return; }
       if (exerciseSwapModalData) { setExerciseSwapModalData(null); return; }
       if (exerciseToSwapConfirm) { setExerciseToSwapConfirm(null); return; }
       if (showSupplementsModal) { setShowSupplementsModal(false); return; }
@@ -1906,7 +1975,8 @@ export default function App() {
     showNotificationsModal, showNewCourseModal, showAiFoodModal,
     showSettingsModal, showAiDietModal, showHomeMealsModal,
     showNutritionHistoryModal, showLogoutConfirmModal, showResetModal,
-    exerciseToSwapConfirm, exerciseSwapModalData, showSupplementsModal
+    exerciseToSwapConfirm, exerciseSwapModalData, showSupplementsModal,
+    showPhysiqueModal
   ]);
 
   // دۆخی بینینی ڕاهێنانەکان لە تابی راهێنان (Compact List vs Large icons)
@@ -5826,6 +5896,30 @@ Rules:
                 <Sparkles size={16} />
                 <span>{t('newCourse')}</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setShowPhysiqueModal(true)}
+                className="no-print"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.18) 100%)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.45)',
+                  padding: '10px 14px',
+                  borderRadius: '16px',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(10px)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  flexShrink: 0
+                }}
+                title={language === 'en' ? 'AI Physique Vision Scan' : 'سکان و هەڵسەنگاندنی جەستە بە بینینی AI'}
+              >
+                <Camera size={16} />
+                <span>{language === 'en' ? 'Scan Physique' : 'سکانکردنی جەستە'}</span>
+              </button>
             </div>
           </header>
 
@@ -5918,6 +6012,37 @@ Rules:
               <div style={{ fontSize: '12px', lineHeight: '1.6', color: 'var(--text-main)', fontWeight: '700' }}>
                 {workoutCourse.rationale}
               </div>
+            </div>
+          )}
+
+          {/* کەرتی پیشاندانی شیکاری بینینی جەستە لە تەنیشت کۆرس */}
+          {profile?.physiqueAnalysis && (
+            <div 
+              onClick={() => setShowPhysiqueModal(true)}
+              className="liquid-card no-print" 
+              style={{ 
+                padding: '12px 14px', 
+                marginBottom: '14px', 
+                border: '1px solid rgba(16, 185, 129, 0.35)', 
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                borderRadius: '16px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Camera size={18} color="#10b981" style={{ flexShrink: 0 }} />
+                <div style={{ fontSize: '12px', lineHeight: '1.5', color: 'var(--text-main)', fontWeight: '700' }}>
+                  <span>{language === 'en' ? 'AI Visual Analysis:' : 'شیکاری بینینی جەستە:'} </span>
+                  <span style={{ color: '#10b981', fontWeight: '900' }}>{profile.physiqueAnalysis.bodyFatPercentage}% {language === 'en' ? 'Fat' : 'چەوری'}</span>
+                  {profile.physiqueAnalysis.laggingMuscles && profile.physiqueAnalysis.laggingMuscles.length > 0 && (
+                    <span style={{ color: 'var(--text-muted)' }}> • {language === 'en' ? 'Priority:' : 'تیشکۆ لەسەر:'} <strong style={{ color: '#ef4444' }}>{profile.physiqueAnalysis.laggingMuscles.join('، ')}</strong></span>
+                  )}
+                </div>
+              </div>
+              <span style={{ fontSize: '11px', color: '#10b981', fontWeight: '800' }}>{language === 'en' ? 'View' : 'پیشاندان'} ←</span>
             </div>
           )}
 
@@ -8204,6 +8329,68 @@ Rules:
                 >
                   + {language === 'en' ? 'Add' : 'زیادکردن'}
                 </button>
+              </div>
+            )}
+          </div>
+
+          {/* ==================== کارتی شیکاری وێنەی لەش بە زیرەکی دەستکرد (AI Physique Vision Card) ==================== */}
+          <div className="dark-card" style={{ padding: '20px', marginBottom: '20px', border: '1.5px solid var(--accent-glow)', background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%)' }}>
+            <div className="flex-between" style={{ marginBottom: '12px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={20} color="var(--accent-primary)" />
+                <h3 style={{ fontSize: '16px', fontWeight: '900', margin: 0 }}>
+                  {language === 'en' ? 'AI Physique Vision & Body Scan' : 'شیکاری وێنەی لەش بە زیرەکی دەستکرد'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPhysiqueModal(true)}
+                className="liquid-pill"
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '12px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 15px var(--accent-glow)'
+                }}
+              >
+                <Camera size={14} />
+                <span>{profile.physiqueAnalysis ? (language === 'en' ? 'Re-Scan' : 'سکانەوە') : (language === 'en' ? 'Scan Body' : 'وێنەگرتن و سکان')}</span>
+              </button>
+            </div>
+
+            {profile.physiqueAnalysis ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="liquid-pill" style={{ padding: '10px', textAlign: 'center', background: 'var(--card-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>چەوری خەمڵێنراو</div>
+                    <div style={{ fontSize: '20px', fontWeight: '900', color: 'var(--color-carbs)' }}>{profile.physiqueAnalysis.bodyFatPercentage}%</div>
+                  </div>
+                  <div className="liquid-pill" style={{ padding: '10px', textAlign: 'center', background: 'var(--card-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>پێکهاتەی لەش</div>
+                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>{profile.physiqueAnalysis.bodyType}</div>
+                  </div>
+                </div>
+
+                {profile.physiqueAnalysis.laggingMuscles && profile.physiqueAnalysis.laggingMuscles.length > 0 && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>
+                    <span style={{ color: '#ef4444', fontWeight: '800' }}>ماسولکە دواکەوتووەکان: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{profile.physiqueAnalysis.laggingMuscles.join(' • ')}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                {language === 'en'
+                  ? 'Take 3 photos (front, side, back) with guided silhouette outlines. AI evaluates body fat %, spots lagging muscles, and customizes your workout course.'
+                  : 'بە گرتنی ٣ وێنە (پێشەوە، تەنیشت، دواوە) لەگەڵ چوارچێوەی ئاوتلاین، ئەی ئای هەڵسەنگاندن بۆ چەوری و ماسولکە لاوازەکان دەکات و کۆرسەکەت بە تەواوی بۆ ڕێکدەخات.'}
               </div>
             )}
           </div>
@@ -11760,6 +11947,16 @@ Rules:
           </div>
         </div>
       )}
+
+      {/* ==================== مۆداڵی پێشکەوتووی شیکاری وێنەی لەش بە زیرەکی دەستکرد (AI Physique Vision Scanner) ==================== */}
+      <PhysiqueScannerModal
+        isOpen={showPhysiqueModal}
+        onClose={() => setShowPhysiqueModal(false)}
+        language={language}
+        currentLangConfig={currentLangConfig}
+        profile={profile}
+        onPhysiqueAnalyzed={handlePhysiqueAnalyzed}
+      />
 
       {/* ==================== هێڵی خوارەوە (Luminous Purple-Blue Liquid Glass Bottom Bar) ==================== */}
       <nav 
