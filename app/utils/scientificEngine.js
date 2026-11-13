@@ -180,6 +180,7 @@ if (typeof window !== "undefined") window.generateWorkoutDirectly = async (profi
    const heightVal = Number(profile?.height) || 175;
    const targetWeightVal = Number(profile?.targetWeight) || weightVal;
    const paceVal = profile?.goalPace || 'normal';
+   const supplementsText = Array.isArray(profile?.supplements) && profile.supplements.length > 0 ? profile.supplements.join(', ') : 'None (Natural)';
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani)';
 
    const homeRules = isHome ? `
@@ -204,6 +205,7 @@ Design a strictly personalized ${days}-day weekly workout program in ${langName}
 - Current Weight: ${weightVal} kg | Height: ${heightVal} cm | Target Weight: ${targetWeightVal} kg
 - Primary Goal: ${profile?.goal || (targetWeightVal > weightVal ? 'Muscle Gain' : targetWeightVal < weightVal ? 'Fat Loss' : 'Body Recomposition')}
 - Progression Pace: ${paceVal}
+- Supplements, Vitamins & Hormones Used: ${supplementsText}
 - Priority Muscles to ENLARGE / Hypertrophy Focus: ${enlargeText || (isFemale ? 'Glutes, Legs & Toned Upper Body' : 'Balanced Chest, Back, Shoulders, Arms & Legs')}
 - Priority Areas to SHRINK / Burn Fat & Tone: ${shrinkText || 'Core & Overall Body Fat'}
 - Training Days: ${days} days per week (${7 - days} rest days)
@@ -212,10 +214,10 @@ Design a strictly personalized ${days}-day weekly workout program in ${langName}
 ${homeRules}
 
 PERSONALIZATION REQUIREMENTS:
-1. You MUST tailor the weekly split, exercise selection, sets, and reps directly to the athlete's gender (${genderLabel}), age (${ageVal}), weight (${weightVal}kg -> ${targetWeightVal}kg), and priority body goals (Enlarge: ${enlargeText || 'Balanced'}, Shrink: ${shrinkText || 'None'}).
-2. Give extra volume (+1 exercise or +1 set) to the priority muscles in "Enlarge", and include targeted high-rep metabolic/core/toning exercises for areas in "Shrink".
+1. You MUST tailor the weekly split, exercise selection, sets, reps, and rest periods directly to the athlete's gender (${genderLabel}), age (${ageVal}), weight (${weightVal}kg -> ${targetWeightVal}kg), supplements/hormones (${supplementsText}), and priority body goals (Enlarge: ${enlargeText || 'Balanced'}, Shrink: ${shrinkText || 'None'}).
+2. Give extra volume (+1 exercise or +1 set) to the priority muscles in "Enlarge", and include targeted high-rep metabolic/core/toning exercises for areas in "Shrink". If the athlete uses Creatine, Pre-Workout, Proteins, or Hormones, optimize work volume and recovery accordingly.
 3. Strictly avoid any exercise that stresses the listed injuries (${(profile?.healthConditions || []).join(', ') || 'None'}).
-4. In "rationale", write a clear 1-2 sentence explanation in ${langName} mentioning the athlete's weight (${weightVal}kg -> ${targetWeightVal}kg) and selected focus muscles so they see the program is custom-built for them.
+4. In "rationale", write a clear 1-2 sentence explanation in ${langName} mentioning the athlete's weight (${weightVal}kg -> ${targetWeightVal}kg), supplements (${supplementsText}), and selected focus muscles so they see the program is custom-built for them.
 
 Return ONLY a valid JSON object matching this exact structure:
 {
@@ -268,27 +270,79 @@ RESPOND ONLY WITH PURE JSON. NO MARKDOWN.`;
    throw new Error("Invalid format from AI");
 };
 
+if (typeof window !== "undefined") window.swapExerciseDirectly = async (profile, currentExercise, dayFocus = '', existingDayExercises = [], lang = 'ku') => {
+   const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani)';
+   const excludedNames = (existingDayExercises || [])
+     .map(e => `${e.name || ''} (${e.englishName || ''})`)
+     .join(', ');
+   const prompt = `You are an elite strength and conditioning coach.
+The athlete wants to replace this single exercise in today's workout:
+- Current Exercise to Replace: "${currentExercise?.name || ''}" (${currentExercise?.englishName || ''})
+- Target Muscle: "${currentExercise?.muscle || dayFocus || 'General'}"
+- Day Focus: "${dayFocus}"
+- Athlete Location: ${profile?.trainingLocation === 'home' ? 'Home Workout' : 'Gym'}
+- Athlete Injuries: ${(profile?.healthConditions || []).join(', ') || 'None'}
+- Athlete Supplements: ${(profile?.supplements || []).join(', ') || 'None'}
+- STRICTLY EXCLUDED EXERCISES (already in today's workout or being replaced — DO NOT return any of these): ${excludedNames}
+
+Choose ONE biomechanically effective replacement exercise targeting the same muscle group (or complementary muscle) that is NOT in the excluded list.
+Return ONLY a valid JSON object (no markdown):
+{
+  "name": "Exercise name in ${langName}",
+  "englishName": "Standard Exercise Name in English (e.g. Incline Dumbbell Press, Lat Pulldown, Cable Lateral Raise, Leg Press, Hammer Curl)",
+  "sets": ${Number(currentExercise?.sets) || 4},
+  "reps": "${currentExercise?.reps || '10-12'}",
+  "rest": "${currentExercise?.rest || '60s'}",
+  "muscle": "${currentExercise?.muscle || 'ماسولکەی ئامانج'}"
+}`;
+   const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.");
+   const cleaned = cleanJsonText(resText);
+   const parsed = JSON.parse(cleaned);
+   if (parsed && (parsed.name || parsed.englishName)) {
+     return {
+       name: parsed.name || parsed.englishName,
+       englishName: parsed.englishName || parsed.name,
+       sets: Number(parsed.sets) || Number(currentExercise?.sets) || 4,
+       reps: String(parsed.reps || currentExercise?.reps || '10-12'),
+       rest: String(parsed.rest || currentExercise?.rest || '60s'),
+       muscle: parsed.muscle || currentExercise?.muscle || 'ماسولکە'
+     };
+   }
+   throw new Error("Invalid replacement exercise from AI");
+};
+
 if (typeof window !== "undefined") window.generateCoachReplyDirectly = async (query, profile, recentMessages = [], lang = 'ku') => {
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani)';
    const compactProfile = {
      name: profile?.name || 'یاریزان',
+     age: profile?.age || 23,
+     gender: profile?.gender || 'male',
      weight: profile?.weight || 75,
      targetWeight: profile?.targetWeight || 80,
+     height: profile?.height || 175,
      goal: profile?.goal || 'Fitness',
-     dailyCalories: profile?.dailyCalories || 2200,
+     goalCalories: profile?.goalCalories || profile?.dailyCalories || 2200,
+     goalProtein: profile?.goalProtein || 150,
      daysPerWeek: profile?.availableDaysPerWeek || 4,
      location: profile?.trainingLocation || 'gym',
-     injuries: profile?.healthConditions || []
+     injuries: profile?.healthConditions || [],
+     supplements: profile?.supplements || []
    };
    const historyText = Array.isArray(recentMessages) && recentMessages.length > 0
-     ? recentMessages.slice(-4).map(m => `${m.sender === 'user' ? 'User' : 'Coach'}: ${m.text}`).join('\n')
+     ? recentMessages.slice(-8).map(m => `${m.sender === 'user' ? 'User' : 'Coach'}: ${m.text}`).join('\n')
      : '';
-   const prompt = `Act as an expert AI fitness coach and sports nutritionist. Respond naturally in ${langName}.
-Profile: ${JSON.stringify(compactProfile)}
-${historyText ? `Recent chat:\n${historyText}\n` : ''}User says: "${query}"
+   const systemInstruction = `You are the intelligent AI Coach inside the BQ GYM app.
+You have unrestricted conversational intelligence: you can hold any kind of natural conversation, chat warmly like a real human mentor and friend, answer any question (sports, bodybuilding, nutrition, supplements, vitamins, hormones, health, recovery, lifestyle, motivation, general knowledge, or casual conversation), and give deeply accurate, helpful answers in ${langName}.
+You also know the athlete's complete profile (including their weight, target weight, injuries, and exact supplements/vitamins/hormones: ${(compactProfile.supplements || []).join(', ') || 'None'}).
+Always reply in ${langName} inside the JSON structure requested.`;
+
+   const prompt = `Athlete Profile: ${JSON.stringify(compactProfile)}
+${historyText ? `Conversation History:\n${historyText}\n` : ''}Athlete's new message: "${query}"
+
+Respond naturally, thoroughly, and conversationally in ${langName} to whatever the athlete said or asked.
 Return ONLY a valid JSON object (no markdown):
-{"reply": "your helpful motivating reply in ${langName}", "thought": "brief scientific reasoning in ${langName}", "suggestedReplies": ["short follow-up 1 in ${langName}", "short follow-up 2 in ${langName}"], "action": null}`;
-   const resText = await window.callGeminiAPI(prompt);
+{"reply": "your complete, natural, helpful response in ${langName}", "thought": "brief reasoning in ${langName}", "suggestedReplies": ["short relevant follow-up 1 in ${langName}", "short relevant follow-up 2 in ${langName}"], "action": null}`;
+   const resText = await window.callGeminiAPI(prompt, systemInstruction);
    const cleaned = cleanJsonText(resText);
    try {
      const parsed = JSON.parse(cleaned);
@@ -301,7 +355,7 @@ Return ONLY a valid JSON object (no markdown):
    }
    const replyMatch = String(resText || '').match(/"reply"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"|\s*\})/);
    return {
-     reply: replyMatch ? replyMatch[1] : String(resText || '').replace(/```json|```/gi, '').trim(),
+     reply: replyMatch ? replyMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : String(resText || '').replace(/```json|```/gi, '').trim(),
      thought: '',
      suggestedReplies: [],
      action: null
@@ -323,7 +377,8 @@ export function calculateScientificGoalByAi({
   trainingLocation = 'gym', 
   goal = '', 
   goalPace = 'normal',
-  healthConditions = [] 
+  healthConditions = [],
+  supplements = []
 }) {
   const currentWeight = Number(weight) || 78;
   const currentHeight = Number(height) || 178;
@@ -443,6 +498,35 @@ export function calculateScientificGoalByAi({
     calculatedCarbs = Math.max(50, Math.round((calculatedCalories - (calculatedProtein * 4) - (calculatedFat * 9)) / 4));
   }
 
+  // کارایی سەپلیمێنت و هۆرمۆن و پرۆتین لەسەر بڕی پرۆتین و کالۆری و ئاوی ڕۆژانە
+  const suppList = Array.isArray(supplements) ? supplements.map(s => String(s).toLowerCase()) : [];
+  const hasHormones = suppList.some(s => s.includes('test') || s.includes('تێستۆستیرۆن') || s.includes('هۆرمۆن') || s.includes('tren') || s.includes('deca') || s.includes('anavar') || s.includes('sarm') || s.includes('rad') || s.includes('mk-677') || s.includes('پێپتاید') || s.includes('ئینسۆلین') || s.includes('gh'));
+  const hasCreatineOrPre = suppList.some(s => s.includes('creatine') || s.includes('کریاتین') || s.includes('pre') || s.includes('تاقە') || s.includes('وزە') || s.includes('c4'));
+  const hasFatBurner = suppList.some(s => s.includes('carnitine') || s.includes('کارنیتین') || s.includes('clen') || s.includes('کلین') || s.includes('چەوری سووتێنەر') || s.includes('burner') || s.includes('yohimbine'));
+  const hasMassGainer = suppList.some(s => s.includes('mass') || s.includes('گەینەر'));
+
+  if (hasHormones) {
+    // هۆرمۆن دروستکردنی پرۆتین لە ماسولکەدا بەرز دەکاتەوە
+    calculatedProtein = Math.round(calculatedProtein * 1.15);
+    if (currentTargetWeight > currentWeight) {
+      calculatedCalories += 180;
+    }
+  }
+  if (hasMassGainer && currentTargetWeight > currentWeight) {
+    calculatedCalories += 150;
+  }
+  if (hasFatBurner && currentTargetWeight < currentWeight) {
+    calculatedProtein = Math.max(calculatedProtein, Math.round(currentWeight * 2.4));
+  }
+  calculatedCarbs = Math.max(50, Math.round((calculatedCalories - (calculatedProtein * 4) - (calculatedFat * 9)) / 4));
+
+  // بڕی ئاوی ڕۆژانە بەپێی کێش و سەپلیمێنت (کریاتین و هۆرمۆن ئاوی زیاتریان دەوێت)
+  let baseWaterMl = Math.round(currentWeight * 38);
+  if (hasCreatineOrPre) baseWaterMl += 600;
+  if (hasHormones) baseWaterMl += 600;
+  if (hasFatBurner) baseWaterMl += 400;
+  const calculatedWaterMl = Math.max(2500, Math.min(6000, Math.round(baseWaterMl / 100) * 100));
+
   return {
     targetWeight: currentTargetWeight,
     targetDays: computedDays,
@@ -451,7 +535,8 @@ export function calculateScientificGoalByAi({
     goalCalories: calculatedCalories,
     goalProtein: calculatedProtein,
     goalCarbs: calculatedCarbs,
-    goalFat: calculatedFat
+    goalFat: calculatedFat,
+    goalWaterMl: calculatedWaterMl
   };
 }
 
@@ -1097,4 +1182,144 @@ export const COMMON_DIET_FOODS = [
   { en: 'coffee', ku: 'قاوە', ar: 'قهوة', fa: 'قهوه' },
   { en: 'tea', ku: 'چا', ar: 'شاي', fa: 'چای' },
   { en: 'water', ku: 'ئاو', ar: 'ماء', fa: 'آب' }
+];
+
+// ==================== کەتەلۆگی تەواوی سەپلیمێنت، پڕۆتین، تاقە، ڤیتامین، دەرمان و هۆرمۆن ====================
+export const MASTER_SUPPLEMENTS_CATALOG = [
+  // ١. پرۆتین و گەینەر (Proteins & Gainers)
+  { id: 'supp_whey', category: 'proteins', name: 'وەی پڕۆتین (Whey Protein)', en: 'Whey Protein', icon: '🥤', desc: 'پڕۆتینی خێرا هەرس بۆ گەشە و چاکبوونەوەی ماسولکە' },
+  { id: 'supp_iso', category: 'proteins', name: 'وەی ئایزۆلەیت (Whey Isolate)', en: 'Whey Isolate', icon: '⚡', desc: 'پڕۆتینی خاوێن بێ چەوری و شەکر بۆ وشککردنەوە' },
+  { id: 'supp_casein', category: 'proteins', name: 'پڕۆتینی کەزین (Casein Protein)', en: 'Casein Protein', icon: '🌙', desc: 'پڕۆتینی خاو هەرس بۆ کاتی خەو و پاراستنی ماسولکە' },
+  { id: 'supp_mass', category: 'proteins', name: 'ماس گەینەر (Mass Gainer)', en: 'Mass Gainer', icon: '💪', desc: 'بەرزکردنەوەی کالۆری و کێش و قەبارەی ماسولکە' },
+  { id: 'supp_hydro', category: 'proteins', name: 'هایدرۆ وەی (Hydro Whey)', en: 'Hydrolyzed Whey', icon: '🔬', desc: 'خێراترین جۆری پڕۆتین بۆ هەڵمژینی دەستبەجێ' },
+  { id: 'supp_beef_pro', category: 'proteins', name: 'پڕۆتینی گۆشتی مانگا (Beef Protein)', en: 'Beef Protein Isolate', icon: '🥩', desc: 'پڕۆتینی بێ لاکتۆز و دەوڵەمەند بە ترشە ئەمینیەکان' },
+  { id: 'supp_vegan_pro', category: 'proteins', name: 'پڕۆتینی ڕووەکی (Plant Protein)', en: 'Plant Protein', icon: '🌱', desc: 'پڕۆتینی سروشتی لە نۆک و برنج بۆ هەرسی ئاسان' },
+  { id: 'supp_protein_bar', category: 'proteins', name: 'پڕۆتین بار (Protein Bar)', en: 'Protein Bar', icon: '🍫', desc: 'ژەمە سووکی دەوڵەمەند بە پڕۆتین' },
+
+  // ٢. کریاتین و ئەمینۆ و چاکبوونەوە (Creatine, Amino & Recovery)
+  { id: 'supp_creatine_mono', category: 'amino', name: 'کریاتین مۆنۆهایدرەیت (Creatine Monohydrate)', en: 'Creatine Monohydrate', icon: '🔋', desc: 'زیادکردنی هێز و قەبارە و وزەی ATP لە ماسولکەدا' },
+  { id: 'supp_creatine_hcl', category: 'amino', name: 'کریاتین HCl (Creatine HCl)', en: 'Creatine HCl', icon: '🧪', desc: 'کریاتینی چڕ بەبێ گلدانەوەی ئاوی ژێر پێست' },
+  { id: 'supp_bcaa', category: 'amino', name: 'بی سی ئەی ئەی (BCAA)', en: 'BCAA', icon: '🧬', desc: 'کەمکردنەوەی هیلاکی و پاراستنی ماسولکە لە کاتی مەشق' },
+  { id: 'supp_eaa', category: 'amino', name: 'ئی ئەی ئەی (EAA - ترشە ئەمینیەکان)', en: 'EAA Essential Amino Acids', icon: '💧', desc: 'تەواوی ٩ ترشە ئەمینیە بنەڕەتییەکان بۆ دروستکردنی ماسولکە' },
+  { id: 'supp_glutamine', category: 'amino', name: 'گلوتامین (L-Glutamine)', en: 'L-Glutamine', icon: '🛡️', desc: 'خێراکردنی چاکبوونەوە و کەمکردنەوەی ئازاری ماسولکە' },
+  { id: 'supp_hmb', category: 'amino', name: 'ئێچ ئێم بی (HMB)', en: 'HMB', icon: '🧱', desc: 'ڕێگری لە سووتانی ماسولکە لە کاتی ڕێجیمی توند' },
+  { id: 'supp_collagen', category: 'amino', name: 'کۆلاجین (Collagen Peptides)', en: 'Collagen Peptides', icon: '🦴', desc: 'بەهێزکردنی جومگەکان و بەستەرەکان و پێست' },
+  { id: 'supp_dextrose', category: 'amino', name: 'کاربۆهایدراتی پاش مەشق (Vitargo / Dextrose)', en: 'Post-Workout Carbs (Vitargo)', icon: '⚡', desc: 'پڕکردنەوەی خێرای گلایکۆجینی ماسولکە' },
+
+  // ٣. تاقە و پێش ڕاهێنان (Pre-Workout & Energy / Pump)
+  { id: 'supp_preworkout', category: 'energy', name: 'پری-وۆرکاوت / تاقە (Pre-Workout)', en: 'Pre-Workout', icon: '🔥', desc: 'زیادکردنی تاقە و تەرکیز و پەمپی ماسولکە پێش ڕاهێنان' },
+  { id: 'supp_citrulline', category: 'energy', name: 'سیترۆلین مالەیت (L-Citrulline Malate)', en: 'Citrulline Malate', icon: '🩸', desc: 'فراوانکردنی دەمارەکان و پەمپی بەهێزی خوێن بۆ ماسولکە' },
+  { id: 'supp_beta_alanine', category: 'energy', name: 'بێتا ئەلانین (Beta-Alanine)', en: 'Beta-Alanine', icon: '⚡', desc: 'زیادکردنی بەرگەگرتن و دواخستنی سووتانەوەی ماسولکە' },
+  { id: 'supp_arginine', category: 'energy', name: 'ئارجینین (L-Arginine / AAKG)', en: 'L-Arginine', icon: '💥', desc: 'زیادکردنی نایتریک ئۆکساید و دەرکەوتنی دەمارەکان' },
+  { id: 'supp_caffeine', category: 'energy', name: 'حەبی کافایین (Caffeine Pills 200mg)', en: 'Caffeine Pills', icon: '☕', desc: 'وریایی مێشک و وزەی خێرا بۆ مەشقی قورس' },
+  { id: 'supp_electrolytes', category: 'energy', name: 'ئەلیکترۆلایت و خوێی کانزایی (Electrolytes)', en: 'Electrolytes', icon: '💦', desc: 'ڕێگری لە گرژبوونی ماسولکە و پاراستنی هایدرەیشن' },
+  { id: 'supp_taurine', category: 'energy', name: 'تۆرین (Taurine)', en: 'Taurine', icon: '🐂', desc: 'باشترکردنی گرژبوونی ماسولکە و تەرکیزی دەمارەکان' },
+
+  // ٤. ڤیتامین و کانزاکان (Vitamins & Minerals)
+  { id: 'supp_multivitamin', category: 'vitamins', name: 'مەڵتی ڤیتامین (Multivitamin)', en: 'Multivitamin', icon: '💊', desc: 'تەواوکەری گشتی ڤیتامین و کانزاکانی جەستە' },
+  { id: 'supp_omega3', category: 'vitamins', name: 'ئۆمێگا ٣ / زەیتی ماسی (Omega-3 Fish Oil)', en: 'Omega-3 Fish Oil', icon: '🐟', desc: 'تەندروستی دڵ و کەمکردنەوەی هەوکردنی جومگەکان' },
+  { id: 'supp_vit_d3', category: 'vitamins', name: 'ڤیتامین D3 + K2 (Vitamin D3)', en: 'Vitamin D3 + K2', icon: '☀️', desc: 'بەهێزکردنی ئێسک و بەرگری و هۆرمۆنی سروشتی' },
+  { id: 'supp_zinc', category: 'vitamins', name: 'زینک (Zinc)', en: 'Zinc', icon: '🛡️', desc: 'پشتگیری هۆرمۆنی تێستۆستیرۆن و کۆئەندامی بەرگری' },
+  { id: 'supp_magnesium', category: 'vitamins', name: 'مەگنیسیۆم (Magnesium Glycinate)', en: 'Magnesium', icon: '💤', desc: 'خاوکردنەوەی ماسولکە و باشترکردنی خەوی شەوانە' },
+  { id: 'supp_zma', category: 'vitamins', name: 'زێد ئێم ئەی (ZMA)', en: 'ZMA (Zinc, Magnesium, B6)', icon: '🌙', desc: 'چاکبوونەوەی شەوانە و ڕێکخستنی هۆرمۆن' },
+  { id: 'supp_vit_c', category: 'vitamins', name: 'ڤیتامین C (Vitamin C 1000mg)', en: 'Vitamin C', icon: '🍊', desc: 'دژە ئۆکسان و کەمکردنەوەی کۆرتیزۆڵ پاش ڕاهێنان' },
+  { id: 'supp_vit_b', category: 'vitamins', name: 'ڤیتامین بی کۆمپلێکس (Vitamin B-Complex)', en: 'Vitamin B-Complex', icon: '⚡', desc: 'گۆڕینی خۆراک بۆ وزە و بەهێزکردنی دەمارەکان' },
+  { id: 'supp_iron', category: 'vitamins', name: 'ئاسن (Iron Supplement)', en: 'Iron', icon: '🩸', desc: 'گواستنەوەی ئۆکسجین لە خوێندا و نەهێشتنی بێهێزی' },
+  { id: 'supp_joint', category: 'vitamins', name: 'پارێزەری جومگە (Glucosamine & MSM)', en: 'Joint Support (Glucosamine)', icon: '🦵', desc: 'پاراستن و نەرمکردنی جومگەکان لە ژێر کێشی قورس' },
+
+  // ٥. چەوری سووتێنەر و دەرمان و گیایی (Fat Burners, Adaptogens & Medications)
+  { id: 'supp_carnitine', category: 'medications', name: 'ئێڵ-کارنیتین (L-Carnitine)', en: 'L-Carnitine', icon: '🔥', desc: 'گواستنەوەی ترشە چەورییەکان بۆ سووتاندن وەک وزە' },
+  { id: 'supp_cla', category: 'medications', name: 'سی ئێڵ ئەی (CLA)', en: 'CLA', icon: '🌿', desc: 'یارمەتیدانی کەمکردنەوەی چەوری کەمەر و ورگ' },
+  { id: 'supp_thermo', category: 'medications', name: 'چەوری سووتێنەر (Thermogenic Fat Burner / Lipo-6)', en: 'Thermogenic Fat Burner', icon: '🌶️', desc: 'بەرزکردنەوەی پلەی گەرمی و خێرایی میتابۆلیزم' },
+  { id: 'supp_ashwagandha', category: 'medications', name: 'ئەشواگاندا (Ashwagandha)', en: 'Ashwagandha', icon: '🌱', desc: 'کەمکردنەوەی سترێس و کۆرتیزۆڵ و زیادکردنی هێز' },
+  { id: 'supp_tribulus', category: 'medications', name: 'تریبیولەس / تێست بوستەر (Tribulus / Test Booster)', en: 'Tribulus Terrestris', icon: '🦁', desc: 'هانده‌ری سروشتی هۆرمۆنی نێرینە و چالاکی' },
+  { id: 'supp_yohimbine', category: 'medications', name: 'یۆهیمبین (Yohimbine HCl)', en: 'Yohimbine HCl', icon: '💊', desc: 'تایبەت بە تواندنەوەی چەورییە سەرسەختەکان' },
+  { id: 'supp_clen', category: 'medications', name: 'کلینبوتیرۆڵ (Clenbuterol)', en: 'Clenbuterol', icon: '⚠️', desc: 'سووتێنەری بەهێزی چەوری و پارێزەری ماسولکە' },
+  { id: 'supp_t3', category: 'medications', name: 'تی ٣ / غودە (T3 Liothyronine)', en: 'T3 Liothyronine', icon: '🔬', desc: 'خێراکردنی بەرزی زیندەچالاکی لە کاتی وشککردنەوە' },
+  { id: 'supp_metformin', category: 'medications', name: 'مێتفۆرمین / ڕێکخەری شەکرە (Metformin / Berberine)', en: 'Metformin / Berberine', icon: '🩺', desc: 'باشترکردنی هەستیاری ئینسۆلین و سوودوەرگرتن لە کاربۆهایدرات' },
+  { id: 'supp_liver_support', category: 'medications', name: 'پارێزەری جگەر و گورچیلە (TUDCA / NAC / Milk Thistle)', en: 'Liver & Kidney Support (TUDCA / NAC)', icon: '🛡️', desc: 'پاککردنەوە و پاراستنی ئەندامەکانی ناوەوە' },
+
+  // ٦. هۆرمۆن و سارمس و پێپتاید (Hormones, SARMs & Peptides)
+  { id: 'supp_test', category: 'hormones', name: 'تێستۆستیرۆن (Testosterone Enanthate / Cypionate / Prop)', en: 'Testosterone', icon: '💉', desc: 'بنەمای زیادکردنی قەبارەی ماسولکە و هێز و چاکبوونەوەی خێرا' },
+  { id: 'supp_sustanon', category: 'hormones', name: 'سۆستانۆن (Sustanon 250)', en: 'Sustanon 250', icon: '💉', desc: 'تێکەڵەی ٤ جۆر تێستۆستیرۆن بۆ گەشەی بەردەوام' },
+  { id: 'supp_deca', category: 'hormones', name: 'دیکا دورابۆلین / نادرۆلۆن (Deca / NPP)', en: 'Nandrolone (Deca / NPP)', icon: '💪', desc: 'زیادکردنی قەبارەی ماسولکە و نەرمکردنی جومگەکان' },
+  { id: 'supp_primobolan', category: 'hormones', name: 'پریمۆبۆلان (Primobolan)', en: 'Primobolan', icon: '👑', desc: 'گەشەی ماسولکەی زۆر خاوێن بە کەمترین زیانی لاوەکی' },
+  { id: 'supp_masteron', category: 'hormones', name: 'ماستیرۆن (Masteron)', en: 'Masteron', icon: '💎', desc: 'ڕەقبوونی ماسولکە و وشککردنەوەی پێش پاڵەوانێتی' },
+  { id: 'supp_boldenone', category: 'hormones', name: 'بۆڵدینۆن (Boldenone / Equipoise)', en: 'Boldenone', icon: '🐎', desc: 'زیادکردنی ئیشتیها و خڕۆکە سوورەکان و بەرگەگرتن' },
+  { id: 'supp_tren', category: 'hormones', name: 'ترینبۆلۆن (Trenbolone Acetate / Enanthate)', en: 'Trenbolone', icon: '🔥', desc: 'بەهێزترین هۆرمۆن بۆ گۆڕینی خۆراک بۆ ماسولکە و سووتاندنی چەوری' },
+  { id: 'supp_anavar', category: 'hormones', name: 'ئەناڤار (Anavar / Oxandrolone)', en: 'Anavar (Oxandrolone)', icon: '💊', desc: 'زیادکردنی هێز و ماسولکەی ساف بەبێ ئاو گلدانەوە' },
+  { id: 'supp_dianabol', category: 'hormones', name: 'دایانابۆڵ (Dianabol)', en: 'Dianabol', icon: '💥', desc: 'زیادکردنی خێرای کێش و قەبارە و هێزی تەقینەوەیی' },
+  { id: 'supp_winstrol', category: 'hormones', name: 'وینسترۆڵ (Winstrol / Stanozolol)', en: 'Winstrol', icon: '⚡', desc: 'وشککردنەوەی ئاوی ژێر پێست و دەرخستنی وردەکاری ماسولکە' },
+  { id: 'supp_anadrol', category: 'hormones', name: 'ئانادرۆڵ (Anadrol / Oxymetholone)', en: 'Anadrol', icon: '🦍', desc: 'بەرزترین قەبارە و پڕبوونی ماسولکە لە کۆرسی قەبارەدا' },
+  { id: 'supp_hgh', category: 'hormones', name: 'هۆرمۆنی گەشە / جی ئێچ (HGH Somatropin)', en: 'HGH Growth Hormone', icon: '🧬', desc: 'نوێکردنەوەی خانەکان و سووتاندنی چەوری و گەشەی ڕیشاڵەکان' },
+  { id: 'supp_mk677', category: 'hormones', name: 'ئێم کەی ٦٧٧ (MK-677 Ibutamoren)', en: 'MK-677 Ibutamoren', icon: '🌙', desc: 'زیادکردنی هۆرمۆنی گەشە و ئیشتیها و قووڵکردنی خەو' },
+  { id: 'supp_rad140', category: 'hormones', name: 'ڕاد ١٤٠ / لیگاندرۆڵ (SARMs: RAD-140 / LGD-4033)', en: 'SARMs (RAD-140 / LGD-4033)', icon: '🧪', desc: 'سارمس بۆ بەئامانجگرتنی وەرگرەکانی ماسولکە و ئێسک' },
+  { id: 'supp_bpc157', category: 'hormones', name: 'پێپتایدی چاکبوونەوە (BPC-157 / TB-500)', en: 'Peptides (BPC-157 / TB-500)', icon: '🩹', desc: 'چارەسەری خێرای پێکان و هەوکردنی ژێ و جومگەکان' }
+];
+
+// ==================== کەتەلۆگی ڕاهێنانە جێگرەوەکان بەپێی ماسولکە (Alternative Exercises Catalog) ====================
+export const ALTERNATIVE_EXERCISES_CATALOG = [
+  // سنگ (Chest)
+  { name: 'بێنج پرێس بە باربێڵ (Barbell Bench Press)', englishName: 'Barbell Bench Press', muscle: 'سنگ', group: 'chest', sets: 4, reps: '8-10', rest: '60s' },
+  { name: 'بێنج پرێس بە دەمبڵ (Dumbbell Bench Press)', englishName: 'Dumbbell Bench Press', muscle: 'سنگ', group: 'chest', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'سەرەوەی سنگ بە دەمبڵ (Incline Dumbbell Press)', englishName: 'Incline Dumbbell Press', muscle: 'سنگ', group: 'chest', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'سەرەوەی سنگ بە باربێڵ (Incline Barbell Press)', englishName: 'Incline Barbell Press', muscle: 'سنگ', group: 'chest', sets: 4, reps: '8-10', rest: '60s' },
+  { name: 'فلای سنگ بە کێبڵ (Cable Crossover Fly)', englishName: 'Cable Crossover', muscle: 'سنگ', group: 'chest', sets: 3, reps: '12-15', rest: '45s' },
+  { name: 'پێک دێک فلای بە ئامێر (Pec Deck Machine Fly)', englishName: 'Pec Deck Machine Fly', muscle: 'سنگ', group: 'chest', sets: 3, reps: '12-15', rest: '45s' },
+  { name: 'سنگ پرێس بە ئامێر (Machine Chest Press)', englishName: 'Machine Chest Press', muscle: 'سنگ', group: 'chest', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'فلای سنگ بە دەمبڵ (Dumbbell Fly)', englishName: 'Dumbbell Fly', muscle: 'سنگ', group: 'chest', sets: 3, reps: '12-15', rest: '45s' },
+  { name: 'ئۆرزی سنگ بە بار (Chest Dips)', englishName: 'Chest Dips', muscle: 'سنگ', group: 'chest', sets: 3, reps: '10-12', rest: '60s' },
+  { name: 'شناو لەسەر زەوی (Push-ups)', englishName: 'Push-ups', muscle: 'سنگ', group: 'chest', sets: 4, reps: '15-20', rest: '45s' },
+
+  // پشت (Back)
+  { name: 'ڕاکێشانی کێبڵ بۆ سنگ (Lat Pulldown)', englishName: 'Lat Pulldown', muscle: 'پشت', group: 'back', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'پاروو بە کێبڵ بە دانیشتنەوە (Seated Cable Row)', englishName: 'Seated Cable Row', muscle: 'پشت', group: 'back', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'بارفیکس / خۆهەڵواسین (Pull-ups)', englishName: 'Pull-ups', muscle: 'پشت', group: 'back', sets: 4, reps: '8-12', rest: '60s' },
+  { name: 'پاروو بە باربێڵ بە چەمانەوە (Barbell Bent-Over Row)', englishName: 'Barbell Bent Over Row', muscle: 'پشت', group: 'back', sets: 4, reps: '8-10', rest: '60s' },
+  { name: 'مشار بە دەمبڵ تاک دەست (One-Arm Dumbbell Row)', englishName: 'One-Arm Dumbbell Row', muscle: 'پشت', group: 'back', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'تی-بار ڕۆو (T-Bar Row)', englishName: 'T-Bar Row', muscle: 'پشت', group: 'back', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'ڕاکێشانی کێبڵ بە دەستی ڕێک (Straight-Arm Pulldown)', englishName: 'Straight-Arm Pulldown', muscle: 'پشت', group: 'back', sets: 3, reps: '12-15', rest: '45s' },
+  { name: 'پشتگیری سنگ لەسەر کورسی بە دەمبڵ (Chest-Supported Row)', englishName: 'Chest Supported Dumbbell Row', muscle: 'پشت', group: 'back', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'دێدلیفت بە باربێڵ (Barbell Deadlift)', englishName: 'Barbell Deadlift', muscle: 'پشت', group: 'back', sets: 4, reps: '6-8', rest: '90s' },
+
+  // شان (Shoulders)
+  { name: 'شان پرێس بە دەمبڵ (Seated Dumbbell Shoulder Press)', englishName: 'Seated Dumbbell Press', muscle: 'شان', group: 'shoulders', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'شان پرێس بە باربێڵ (Overhead Barbell Press)', englishName: 'Overhead Barbell Press', muscle: 'شان', group: 'shoulders', sets: 4, reps: '8-10', rest: '60s' },
+  { name: 'بەرزکردنەوەی تەنیشت بە دەمبڵ (Dumbbell Lateral Raise)', englishName: 'Dumbbell Lateral Raise', muscle: 'شان', group: 'shoulders', sets: 4, reps: '12-15', rest: '45s' },
+  { name: 'بەرزکردنەوەی پێشەوەی شان (Dumbbell Front Raise)', englishName: 'Dumbbell Front Raise', muscle: 'شان', group: 'shoulders', sets: 3, reps: '12-15', rest: '45s' },
+  { name: 'ڕاکێشانی پەت بۆ دەموچاو (Face Pull)', englishName: 'Cable Face Pull', muscle: 'شان', group: 'shoulders', sets: 4, reps: '15', rest: '45s' },
+  { name: 'پشتی شان بە ئامێر (Reverse Pec Deck)', englishName: 'Reverse Pec Deck', muscle: 'شان', group: 'shoulders', sets: 3, reps: '12-15', rest: '45s' },
+  { name: 'ئاڕنۆڵد پرێس (Arnold Dumbbell Press)', englishName: 'Arnold Press', muscle: 'شان', group: 'shoulders', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'کۆڵەمە بە دەمبڵ (Dumbbell Shrugs)', englishName: 'Dumbbell Shrugs', muscle: 'شان', group: 'shoulders', sets: 4, reps: '12-15', rest: '45s' },
+
+  // قاچ و سمت (Legs & Glutes)
+  { name: 'سکوات بە باربێڵ (Barbell Squat)', englishName: 'Barbell Squat', muscle: 'قاچ', group: 'legs', sets: 4, reps: '8-10', rest: '75s' },
+  { name: 'لێگ پرێس بە ئامێر (Leg Press)', englishName: 'Leg Press', muscle: 'قاچ', group: 'legs', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'درێژکردنی پێشەوەی قاچ (Leg Extension)', englishName: 'Leg Extension', muscle: 'قاچ', group: 'legs', sets: 4, reps: '12-15', rest: '45s' },
+  { name: 'ڕاکێشانی پشتی قاچ (Seated / Lying Leg Curl)', englishName: 'Seated Leg Curl', muscle: 'پشتی قاچ', group: 'legs', sets: 4, reps: '12-15', rest: '45s' },
+  { name: 'دێدلیفتی ڕۆمانی بۆ پشتی قاچ (Romanian Deadlift)', englishName: 'Romanian Deadlift', muscle: 'پشتی قاچ', group: 'legs', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'سکواتی بولگاری بۆ قاچ و سمت (Bulgarian Split Squat)', englishName: 'Bulgarian Split Squat', muscle: 'سمت و قاچ', group: 'legs', sets: 3, reps: '10-12', rest: '60s' },
+  { name: 'هیپ ترەست بۆ گەورەکردنی سمت (Barbell Hip Thrust)', englishName: 'Barbell Hip Thrust', muscle: 'سمت', group: 'legs', sets: 4, reps: '10-12', rest: '60s' },
+  { name: 'گۆبلێت سکوات بە دەمبڵ (Goblet Squat)', englishName: 'Goblet Squat', muscle: 'قاچ', group: 'legs', sets: 4, reps: '12-15', rest: '60s' },
+  { name: 'هەنگاونان بە دەمبڵ (Dumbbell Lunges)', englishName: 'Dumbbell Lunges', muscle: 'قاچ', group: 'legs', sets: 3, reps: '12', rest: '60s' },
+  { name: 'بەرزبوونەوە لەسەر پەنجەی پێ بۆ پوز (Standing Calf Raise)', englishName: 'Standing Calf Raise', muscle: 'پوز', group: 'legs', sets: 4, reps: '15-20', rest: '45s' },
+
+  // قۆڵ و باڵ (Arms: Biceps & Triceps)
+  { name: 'جەڵەوی بایسێپس بە باربێڵ (Barbell Biceps Curl)', englishName: 'Barbell Biceps Curl', muscle: 'قۆڵ', group: 'arms', sets: 4, reps: '10-12', rest: '45s' },
+  { name: 'بایسێپس بە دەمبڵ بە وەستانەوە (Dumbbell Biceps Curl)', englishName: 'Dumbbell Biceps Curl', muscle: 'قۆڵ', group: 'arms', sets: 4, reps: '10-12', rest: '45s' },
+  { name: 'چەکوش کێرڵ بە دەمبڵ (Hammer Curl)', englishName: 'Hammer Curl', muscle: 'قۆڵ', group: 'arms', sets: 3, reps: '12', rest: '45s' },
+  { name: 'پریچەر کێرڵ لەسەر مێز (Preacher Curl)', englishName: 'EZ-Bar Preacher Curl', muscle: 'قۆڵ', group: 'arms', sets: 3, reps: '10-12', rest: '45s' },
+  { name: 'ترایسێپس بە پەت لەسەر کێبڵ (Triceps Rope Pushdown)', englishName: 'Triceps Rope Pushdown', muscle: 'پاشەملە', group: 'arms', sets: 4, reps: '12-15', rest: '45s' },
+  { name: 'ترایسێپس لە پشت سەر بە دەمبڵ (Overhead Triceps Extension)', englishName: 'Overhead Dumbbell Triceps Extension', muscle: 'پاشەملە', group: 'arms', sets: 3, reps: '12', rest: '45s' },
+  { name: 'تێکشکێنەری کەللەسەر بە بار (Skull Crushers)', englishName: 'EZ-Bar Skullcrusher', muscle: 'پاشەملە', group: 'arms', sets: 3, reps: '10-12', rest: '45s' },
+  { name: 'پاشەملە لەسەر کورسی (Bench Dips)', englishName: 'Bench Dips', muscle: 'پاشەملە', group: 'arms', sets: 3, reps: '12-15', rest: '45s' },
+
+  // سک و کاردیۆ (Core & Cardio)
+  { name: 'کڕانچی سک بە کێبڵ (Cable Rope Crunch)', englishName: 'Cable Rope Crunch', muscle: 'ورگ و کەمەر', group: 'core', sets: 4, reps: '15-20', rest: '40s' },
+  { name: 'بەرزکردنەوەی قاچ بە هەڵواسراوی (Hanging Leg Raise)', englishName: 'Hanging Leg Raise', muscle: 'ورگ و کەمەر', group: 'core', sets: 4, reps: '12-15', rest: '40s' },
+  { name: 'پڵانکی جێگیر بۆ توندکردنەوەی سک (Plank Hold)', englishName: 'Plank', muscle: 'ورگ و کەمەر', group: 'core', sets: 3, reps: '60s', rest: '30s' },
+  { name: 'پێچکردنی ڕووسی بۆ کەمەر (Russian Twists)', englishName: 'Russian Twists', muscle: 'ورگ و کەمەر', group: 'core', sets: 4, reps: '20', rest: '30s' },
+  { name: 'چیاڕەوی خێرا (Mountain Climbers)', englishName: 'Mountain Climbers', muscle: 'کاردیۆ و سک', group: 'core', sets: 3, reps: '45s', rest: '30s' },
+  { name: 'ڕۆیشتن لەسەر تەرمیلی لێژ (Incline Treadmill Walk)', englishName: 'Walking on Incline Treadmill', muscle: 'کاردیۆ', group: 'core', sets: 1, reps: '20 خولەک', rest: '60s' },
+  { name: 'پاسکیلی وەستاو (Stationary Bike)', englishName: 'Stationary Bike', muscle: 'کاردیۆ', group: 'core', sets: 1, reps: '20 خولەک', rest: '60s' }
 ];

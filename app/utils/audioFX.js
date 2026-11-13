@@ -85,37 +85,62 @@ export const playCountdownTick = (soundEnabled = true, freq = 950) => {
 };
 
 export const playTimerCompleteSound = (soundEnabled = true) => {
-  triggerHaptic([40, 60, 40]);
+  triggerHaptic([300, 120, 300, 120, 500]);
   if (!soundEnabled) return;
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(740, now);
-    gain1.gain.setValueAtTime(0.0001, now);
-    gain1.gain.linearRampToValueAtTime(0.22, now + 0.006);
-    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.08);
+    // کۆمپرێسەری دەنگ بۆ بەرزترین ئاستی دەنگ و زرینگانەوەی تەواو (Loud Resonant Gym Bell Alarm)
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-10, now);
+    compressor.knee.setValueAtTime(8, now);
+    compressor.ratio.setValueAtTime(3.5, now);
+    compressor.attack.setValueAtTime(0.001, now);
+    compressor.release.setValueAtTime(0.15, now);
 
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    const t2 = now + 0.09;
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1100, t2);
-    gain2.gain.setValueAtTime(0.0001, t2);
-    gain2.gain.linearRampToValueAtTime(0.25, t2 + 0.006);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.25);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(t2);
-    osc2.stop(t2 + 0.25);
+    const masterBoost = ctx.createGain();
+    masterBoost.gain.setValueAtTime(1.85, now);
+    compressor.connect(masterBoost);
+    masterBoost.connect(ctx.destination);
+
+    // لێدانی ٣ زەنگی بەهێزی یەک لە دوای یەک لەگەڵ زرینگانەوەی درێژ (Resonant Bell Overtones)
+    const strikes = [0, 0.28, 0.58];
+    const bellPartials = [
+      { freq: 880, amp: 1.0, decay: 1.9, type: 'triangle' },
+      { freq: 1318.5, amp: 0.9, decay: 1.7, type: 'sine' },
+      { freq: 1760, amp: 1.0, decay: 2.3, type: 'sine' },
+      { freq: 2637, amp: 0.75, decay: 1.6, type: 'square' },
+      { freq: 3520, amp: 0.6, decay: 2.0, type: 'sine' }
+    ];
+
+    strikes.forEach((strikeOffset, sIdx) => {
+      const isFinalStrike = sIdx === strikes.length - 1;
+      const startTime = now + strikeOffset;
+      const durationMult = isFinalStrike ? 1.45 : 0.85;
+
+      bellPartials.forEach((p) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = p.type;
+        osc.frequency.setValueAtTime(p.freq, startTime);
+        if (isFinalStrike) {
+          osc.frequency.exponentialRampToValueAtTime(p.freq * 1.007, startTime + 0.35);
+          osc.frequency.exponentialRampToValueAtTime(p.freq, startTime + p.decay * durationMult);
+        }
+
+        const peakGain = Math.min(1.0, p.amp);
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.0008, startTime + p.decay * durationMult);
+
+        osc.connect(gain);
+        gain.connect(compressor);
+        osc.start(startTime);
+        osc.stop(startTime + p.decay * durationMult + 0.05);
+      });
+    });
   } catch (e) {}
 };
 

@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
-import { Camera, Utensils, Drumstick, Apple, Coffee, Bean, Flame, Ruler, Calculator, Check, MessageCircle, Zap, Sparkles, Dumbbell, Droplet, Target, Trophy, UtensilsCrossed, Clipboard, Salad, BicepsFlexed, Milk, Bandage, Hand, Egg, Fish, Beef, Cookie, Banana, Hamburger, Calendar, Bot, PersonStanding, X, Wheat, RefreshCw, Scale, User, ThumbsUp, Mic, AlertTriangle, Lightbulb, CalendarDays, MapPin, Settings, Palette, Moon, Sun, Globe, Pencil, Search, Timer, Play, Pause, RotateCcw, Printer, Download, Bell, Plus, Minus, Info, CheckCircle2, Video, Trash2, LogOut, Phone, Cloud, Volume2, VolumeX, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, Utensils, Drumstick, Apple, Coffee, Bean, Flame, Ruler, Calculator, Check, MessageCircle, Zap, Sparkles, Dumbbell, Droplet, Target, Trophy, UtensilsCrossed, Clipboard, Salad, BicepsFlexed, Milk, Bandage, Hand, Egg, Fish, Beef, Cookie, Banana, Hamburger, Calendar, Bot, PersonStanding, X, Wheat, RefreshCw, Scale, User, ThumbsUp, Mic, AlertTriangle, Lightbulb, CalendarDays, MapPin, Settings, Palette, Moon, Sun, Globe, Pencil, Search, Timer, Play, Pause, RotateCcw, Printer, Download, Bell, Plus, Minus, Info, CheckCircle2, Video, Trash2, LogOut, Phone, Cloud, Volume2, VolumeX, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, SlidersHorizontal, Filter, Pill, Repeat } from 'lucide-react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 const MuscleAnatomy3D = dynamic(() => import('./components/MuscleAnatomy3D'), { ssr: false });
@@ -22,7 +22,8 @@ import {
 import { 
   sanitizeWorkoutPlan, calculateScientificGoalByAi, generateAiScientificProgram, 
   MALE_BODY_PARTS, FEMALE_BODY_PARTS, DEFAULT_7_DAY_DIET,
-  DAY_NAMES, DAY_SHORT_NAMES, COMMON_DIET_FOODS
+  DAY_NAMES, DAY_SHORT_NAMES, COMMON_DIET_FOODS,
+  MASTER_SUPPLEMENTS_CATALOG, ALTERNATIVE_EXERCISES_CATALOG
 } from './utils/scientificEngine';
 import { TRANSLATIONS, FOOD_TRANSLATIONS, EXERCISE_TRANSLATIONS } from './utils/translations';
 
@@ -153,8 +154,12 @@ if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemI
 
 if (typeof window !== "undefined") window.analyzeFoodDirectly = async (base64Image, query) => {
    const prompt = query ? 
-    "Analyze the food query: " + query + ". Return JSON: {isFood:true, name, englishName, icon, baseCalories, baseProtein, baseCarbs, baseFat, baseSugar, units: [{name, multiplier, defaultAmount}]}" :
-    "You are a clinical nutritionist. Analyze this food image. If not edible food, return JSON: {isFood:false, message:'ئەم وێنەیە خواردن نییە'}. If food, analyze the portion shown or nutrition label and calculate exact nutritional macros per 100g (or standard serving). Return JSON: {isFood:true, name:'Kurdish Name', englishName:'English Name', icon:'🍽️', baseCalories: number (kcal per 100g), baseProtein: number (grams per 100g), baseCarbs: number (grams per 100g), baseFat: number (grams per 100g), baseSugar: number (grams per 100g)}";
+    `Analyze the food query: "${query}". Determine if it is a liquid/drink (isLiquid: true/false), its natural standard unit in Kurdish (e.g. "دانە" for fruits/eggs/burgers/bread, "قاپ" for rice/stews/dishes, "گڵاس" for milk/juice/drinks, "کەوچک" for oils/honey/sauces, "سکۆپ" for protein powders), and the exact weight/volume in grams or ml of 1 standard serving (standardWeight, e.g. 250 for pomegranate, 180 for apple, 55 for egg, 200 for plate of rice, 250 for glass of drink). Return JSON: {isFood:true, name:"Kurdish Name", englishName:"English Name", icon:"🍽️", isLiquid:boolean, standardUnit:"دانە|قاپ|گڵاس|کەوچک|سکۆپ", standardWeight:number, baseCalories:number (per 100g/100ml), baseProtein:number (per 100g/100ml), baseCarbs:number (per 100g/100ml), baseFat:number (per 100g/100ml), baseSugar:number}` :
+    `You are an expert clinical nutritionist with precision visual portion estimation. Analyze this food image carefully. If not edible food/drink, return JSON: {isFood:false, message:"ئەم وێنەیە خواردن نییە"}. If it is food or drink:
+1. Identify the exact food/meal or drink in Kurdish ("name") and English ("englishName").
+2. Estimate the EXACT total weight in grams (or volume in ml if liquid) visible in the image ("estimatedWeightGrams", e.g. 250g, 350g, etc.), plus its natural unit ("estimatedUnit": "قاپ", "دانە", "گڵاس", "کاسە") and count ("estimatedQty": 1, 2, etc.).
+3. Calculate BOTH the nutritional macros per 100g/100ml ("baseCalories", "baseProtein", "baseCarbs", "baseFat") AND the total macros for the entire scanned portion ("scannedCalories", "scannedProtein", "scannedCarbs", "scannedFat").
+Return JSON: {isFood:true, name:"Kurdish Name", englishName:"English Name", icon:"🍽️", isLiquid:boolean, estimatedUnit:"قاپ|دانە|گڵاس", estimatedQty:number, estimatedWeightGrams:number, baseCalories:number, baseProtein:number, baseCarbs:number, baseFat:number, scannedCalories:number, scannedProtein:number, scannedCarbs:number, scannedFat:number}`;
    const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.", null, base64Image, SCAN_GEMINI_MODELS);
    const parsed = JSON.parse(cleanJsonText(resText));
    if (parsed.isFood) {
@@ -174,13 +179,16 @@ if (typeof window !== "undefined") window.analyzeFoodDirectly = async (base64Ima
      parsed.baseCarbs = toNum(parsed.baseCarbs, toNum(parsed.carbsNum, toNum(parsed.carbs, 20)));
      parsed.baseFat = toNum(parsed.baseFat, toNum(parsed.fatNum, toNum(parsed.fat, 5)));
      parsed.baseSugar = toNum(parsed.baseSugar, toNum(parsed.sugarNum, toNum(parsed.sugar, 2)));
+     parsed.standardWeight = toNum(parsed.standardWeight, toNum(parsed.estimatedWeightGrams, 150));
+     parsed.estimatedWeightGrams = toNum(parsed.estimatedWeightGrams, parsed.standardWeight || 200);
+     parsed.estimatedQty = toNum(parsed.estimatedQty, 1);
    }
    return parsed;
 };
 
 if (typeof window !== "undefined") window.recommendDaysDirectly = async (profile) => {
    const goal = profile?.goal || 'Fitness';
-   const profileText = `Age: ${profile?.age || 23}, Gender: ${profile?.gender || 'male'}, Weight: ${profile?.weight || 75} kg, Goal: ${goal}, Injuries: ${profile?.healthConditions ? profile.healthConditions.join(', ') : 'None'}`;
+   const profileText = `Age: ${profile?.age || 23}, Gender: ${profile?.gender || 'male'}, Weight: ${profile?.weight || 75} kg, Goal: ${goal}, Supplements: ${(profile?.supplements || []).join(', ') || 'None'}, Injuries: ${profile?.healthConditions ? profile.healthConditions.join(', ') : 'None'}`;
    const prompt = `You are an expert sports scientist and AI fitness coach. Based on this profile: ${profileText}, recommend the optimal workout days per week (3 to 6). Return JSON only: {"recommendedDays": number, "reason": "Short 1-sentence Kurdish explanation"}`;
    const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.");
    return JSON.parse(cleanJsonText(resText));
@@ -188,7 +196,8 @@ if (typeof window !== "undefined") window.recommendDaysDirectly = async (profile
 
 if (typeof window !== "undefined") window.generatePlanDirectly = async (profile, dietType, goalCalories, lang = 'ku') => {
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani - کوردی سۆرانی)';
-   const prompt = `Generate a healthy 7-day diet plan strictly in ${langName} script matching approx ${goalCalories} kcal per day. Diet style: ${dietType}. All food names ("name") and units ("unit") MUST be written in ${langName} (NO Latin/English letters for Kurdish/Arabic/Persian). Also provide "englishName" in English. Return ONLY a JSON array of exactly 7 objects, each with breakfast, lunch, snack, dinner arrays of foods. Format of food: {id, name, englishName, calories, protein, carbs, fat, icon, quantity, unit}. DO NOT ADD MARKDOWN.`;
+   const supplementsText = Array.isArray(profile?.supplements) && profile.supplements.length > 0 ? profile.supplements.join(', ') : 'None';
+   const prompt = `Generate a healthy 7-day diet plan strictly in ${langName} script matching approx ${goalCalories} kcal per day. Diet style: ${dietType}. Athlete weight: ${profile?.weight || 75}kg -> Target: ${profile?.targetWeight || 80}kg. Athlete supplements used: ${supplementsText} (if they use Whey Protein, Mass Gainer, Creatine, etc., integrate appropriate meals/shakes into their daily plan). All food names ("name") and units ("unit") MUST be written in ${langName} (NO Latin/English letters for Kurdish/Arabic/Persian). Use "مل" or "گڵاس" for liquids/drinks and "گرام", "قاپ", or "دانە" for solid foods. Also provide "englishName" in English. Return ONLY a JSON array of exactly 7 objects, each with breakfast, lunch, snack, dinner arrays of foods. Format of food: {id, name, englishName, calories, protein, carbs, fat, icon, quantity, unit}. DO NOT ADD MARKDOWN.`;
    const resText = await window.callGeminiAPI(prompt);
    return JSON.parse(cleanJsonText(resText));
 };
@@ -771,7 +780,7 @@ export default function App() {
     if (u === 'g' || u === 'گرام' || u === 'گرم' || u === 'جرام' || uLow === 'gram' || uLow === 'grams') {
       return lang === 'en' ? 'g' : lang === 'ar' ? 'جرام' : lang === 'fa' ? 'گرم' : 'گرام';
     }
-    if (u === 'ml' || uLow === 'milliliter' || uLow === 'ml') {
+    if (u === 'ml' || u === 'مل' || u === 'میلی‌لیتر' || uLow === 'milliliter' || uLow === 'ml') {
       return lang === 'en' ? 'ml' : lang === 'ar' ? 'مل' : lang === 'fa' ? 'میلی‌لیتر' : 'مل';
     }
     if (u.includes('سکۆپ') || u.includes('سكوب') || u.includes('اسکوپ') || uLow.includes('scoop')) {
@@ -1331,7 +1340,11 @@ export default function App() {
     try {
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('app_profile');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (!Array.isArray(parsed.supplements)) parsed.supplements = [];
+          return parsed;
+        }
       }
     } catch (e) {}
     const base = {
@@ -1347,7 +1360,8 @@ export default function App() {
       height: 178,
       activityLevel: 'active',
       goal: 'گەشەی ماسولکە',
-      healthConditions: []
+      healthConditions: [],
+      supplements: []
     };
     const calculated = calculateScientificGoalByAi(base);
     return {
@@ -1369,8 +1383,52 @@ export default function App() {
     weight: '',
     targetWeight: '',
     goal: 'دابەزاندنی کێش',
-    healthConditions: []
+    healthConditions: [],
+    usesSupplements: null,
+    supplements: []
   });
+
+  // دۆخی مۆداڵی سەپلیمێنت و ڤیتامین و هۆرمۆنەکان
+  const [showSupplementsModal, setShowSupplementsModal] = useState(false);
+  const [supplementCategoryFilter, setSupplementCategoryFilter] = useState('all');
+  const [supplementSearchQuery, setSupplementSearchQuery] = useState('');
+  const [supplementSearchText, setSupplementSearchText] = useState('');
+  const [customSupplementInput, setCustomSupplementInput] = useState('');
+  const [supplementsModalSource, setSupplementsModalSource] = useState('onboarding'); // 'onboarding' | 'profile'
+
+  // دۆخی فلتەری پۆلەکانی خۆراک لە سەرەوەی بانکی خۆراک
+  const [showFoodCategoryFilter, setShowFoodCategoryFilter] = useState(false);
+
+  // دۆخی کیبۆردی مۆبایل بۆ ڕاهێنەری زیرەک و شاردنەوەی هێڵی خوارەوە
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [isChatInputFocused, setIsChatInputFocused] = useState(false);
+  const [visualViewportStyle, setVisualViewportStyle] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    let maxHeight = window.innerHeight || vv.height;
+
+    const handleViewportChange = () => {
+      const currentH = vv.height;
+      const fullH = Math.max(window.innerHeight || currentH, maxHeight);
+      if (currentH > maxHeight) maxHeight = currentH;
+      const kbOpen = (fullH - currentH) > 110;
+      setIsKeyboardOpen(kbOpen);
+      setVisualViewportStyle({
+        height: `${Math.round(currentH)}px`,
+        top: `${Math.round(vv.offsetTop)}px`
+      });
+    };
+
+    vv.addEventListener('resize', handleViewportChange);
+    vv.addEventListener('scroll', handleViewportChange);
+    handleViewportChange();
+    return () => {
+      vv.removeEventListener('resize', handleViewportChange);
+      vv.removeEventListener('scroll', handleViewportChange);
+    };
+  }, []);
 
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [pickerDay, setPickerDay] = useState(15);
@@ -1623,7 +1681,7 @@ export default function App() {
   const [completedDayIndices, setCompletedDayIndices] = useState(() => {
     try {
       if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('app_completed_day_indices');
+        const saved = localStorage.getItem('app_completed_days_manual_v5');
         if (saved) return JSON.parse(saved);
       }
     } catch (e) {}
@@ -1633,7 +1691,7 @@ export default function App() {
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('app_completed_day_indices', JSON.stringify(completedDayIndices));
+        localStorage.setItem('app_completed_days_manual_v5', JSON.stringify(completedDayIndices));
       }
     } catch (e) {}
   }, [completedDayIndices]);
@@ -1652,7 +1710,7 @@ export default function App() {
     setCompletedDayIndices([]);
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('app_completed_day_indices', JSON.stringify([]));
+        localStorage.setItem('app_completed_days_manual_v5', JSON.stringify([]));
         localStorage.setItem('app_current_workout_week', getCurrentWeekKey());
       }
     } catch (e) {}
@@ -1705,13 +1763,88 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ==================== تایمەری پشووی نێوان سێتەکان (Gym Rest Timer) ====================
+  // ==================== تایمەری پشووی نێوان سێتەکان (Gym Rest Timer + 3s Green Overlay + Background Notification) ====================
   const [restTimerSeconds, setRestTimerSeconds] = useState(0);
   const [restTimerTotal, setRestTimerTotal] = useState(60);
   const [restTimerRunning, setRestTimerRunning] = useState(false);
   const [activeTimerSet, setActiveTimerSet] = useState(null);
+  const [showStartSetOverlay, setShowStartSetOverlay] = useState(false);
+  const restTimerEndTimeRef = useRef(null);
+  const startSetOverlayTimeoutRef = useRef(null);
   const [expandedExerciseIndex, setExpandedExerciseIndex] = useState(null);
   const [activeFormExercise, setActiveFormExercise] = useState(null);
+
+  // دۆخی گۆڕین و لابردنی ڕاهێنان (Exercise Swap & Replacement Modal State)
+  const [exerciseToSwapConfirm, setExerciseToSwapConfirm] = useState(null); // { ex, exIdx }
+  const [exerciseSwapModalData, setExerciseSwapModalData] = useState(null); // { ex, exIdx }
+  const [swapMuscleFilter, setSwapMuscleFilter] = useState('same');
+  const [isAiSwappingExercise, setIsAiSwappingExercise] = useState(false);
+
+  const handleReplaceExerciseInDay = (exIdx, newEx) => {
+    if (!workoutCourse || !Array.isArray(workoutCourse.weeklyPlan)) return;
+    const updatedPlan = workoutCourse.weeklyPlan.map((day, dIdx) => {
+      if (dIdx !== selectedDayIdx) return day;
+      const exList = [...(day.exercises || [])];
+      if (exIdx >= 0 && exIdx < exList.length) {
+        exList[exIdx] = {
+          ...exList[exIdx],
+          name: newEx.name,
+          englishName: newEx.englishName || newEx.name,
+          sets: Number(newEx.sets) || Number(exList[exIdx]?.sets) || 4,
+          reps: newEx.reps || exList[exIdx]?.reps || '10-12',
+          rest: newEx.rest || exList[exIdx]?.rest || '60s',
+          muscle: newEx.muscle || exList[exIdx]?.muscle || 'ماسولکە'
+        };
+      }
+      return { ...day, exercises: exList };
+    });
+    const updatedCourse = { ...workoutCourse, weeklyPlan: updatedPlan, isAiOnlineGenerated: true };
+    setWorkoutCourse(updatedCourse);
+    setExerciseSwapModalData(null);
+    setExerciseToSwapConfirm(null);
+    playSparkleSound();
+  };
+
+  const handleDeleteExerciseFromDay = (exIdx) => {
+    if (!workoutCourse || !Array.isArray(workoutCourse.weeklyPlan)) return;
+    const updatedPlan = workoutCourse.weeklyPlan.map((day, dIdx) => {
+      if (dIdx !== selectedDayIdx) return day;
+      const exList = (day.exercises || []).filter((_, idx) => idx !== exIdx);
+      return { ...day, exercises: exList };
+    });
+    const updatedCourse = { ...workoutCourse, weeklyPlan: updatedPlan, isAiOnlineGenerated: true };
+    setWorkoutCourse(updatedCourse);
+    setExerciseSwapModalData(null);
+    setExerciseToSwapConfirm(null);
+    playDeleteSound();
+  };
+
+  const handleAiSwapSingleExercise = async (ex, exIdx) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      alert(currentLangConfig.code === 'en' ? 'Please connect to the internet to swap exercise via AI.' : 'تکایە پەیوەندی بە ئینتەرنێتەوە بکە بۆ گۆڕینی ڕاهێنانەکە لە ڕێگەی زیرەکی دەستکردەوە.');
+      return;
+    }
+    setIsAiSwappingExercise(true);
+    try {
+      const currentDayObj = workoutCourse?.weeklyPlan?.[selectedDayIdx] || {};
+      const existingExercises = currentDayObj.exercises || [];
+      const replacement = await window.swapExerciseDirectly(
+        profile,
+        ex,
+        currentDayObj.focus || '',
+        existingExercises,
+        language
+      );
+      if (replacement && (replacement.name || replacement.englishName)) {
+        handleReplaceExerciseInDay(exIdx, replacement);
+      }
+    } catch (err) {
+      console.error("AI Single Exercise Swap Error:", err);
+      alert(currentLangConfig.code === 'en' ? 'Could not connect to AI. You can also select any exercise from the list below.' : 'کێشەیەک لە هێڵی ئینتەرنێت ڕوویدا. تکایە دووبارە هەوڵبدەرەوە یان لە لیستی خوارەوە ڕاهێنانێک هەڵبژێرە.');
+    } finally {
+      setIsAiSwappingExercise(false);
+    }
+  };
 
   // ==================== پاڵپشتی دوگمەی گەڕانەوەی مۆبایل (Android Back Button / History PopState) ====================
   const isAnyModalOpen = Boolean(
@@ -1729,7 +1862,10 @@ export default function App() {
     showLogoutConfirmModal ||
     showResetModal ||
     selectedFoodForPortion ||
-    activeFormExercise
+    activeFormExercise ||
+    exerciseToSwapConfirm ||
+    exerciseSwapModalData ||
+    showSupplementsModal
   );
 
   useEffect(() => {
@@ -1741,6 +1877,9 @@ export default function App() {
     }
 
     const handleBackNavigation = () => {
+      if (exerciseSwapModalData) { setExerciseSwapModalData(null); return; }
+      if (exerciseToSwapConfirm) { setExerciseToSwapConfirm(null); return; }
+      if (showSupplementsModal) { setShowSupplementsModal(false); return; }
       if (activeFormExercise) { setActiveFormExercise(null); return; }
       if (selectedFoodForPortion) { setSelectedFoodForPortion(null); return; }
       if (showScanModal) { setShowScanModal(false); return; }
@@ -1766,7 +1905,8 @@ export default function App() {
     showScanModal, showEditProfileModal, showAuthModal, showGoalModal,
     showNotificationsModal, showNewCourseModal, showAiFoodModal,
     showSettingsModal, showAiDietModal, showHomeMealsModal,
-    showNutritionHistoryModal, showLogoutConfirmModal, showResetModal
+    showNutritionHistoryModal, showLogoutConfirmModal, showResetModal,
+    exerciseToSwapConfirm, exerciseSwapModalData, showSupplementsModal
   ]);
 
   // دۆخی بینینی ڕاهێنانەکان لە تابی راهێنان (Compact List vs Large icons)
@@ -1814,32 +1954,107 @@ export default function App() {
   const playQuickRemoveSound = () => audioFX.playQuickRemoveSound(soundEnabled);
   const playDeleteSound = () => audioFX.playDeleteSound(soundEnabled);
 
+  const triggerRestTimerFinishedEffects = useCallback(() => {
+    playTimerCompleteSound();
+    setRestTimerRunning(false);
+    setActiveTimerSet(null);
+    restTimerEndTimeRef.current = null;
+
+    // شاشەی سەوزی پڕاوپڕ بە نووسینی گەورەی (دەستپێکە) بۆ ماوەی ٣ چرکە
+    setShowStartSetOverlay(true);
+    if (startSetOverlayTimeoutRef.current) clearTimeout(startSetOverlayTimeoutRef.current);
+    startSetOverlayTimeoutRef.current = setTimeout(() => {
+      setShowStartSetOverlay(false);
+    }, 3000);
+
+    // نۆتیفیکەیشنی گەورە بۆ سەر شاشەی مۆبایل ئەگەر یاریزان لە دەرەوەی بەرنامەکەش بێت
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        const notifTitle = "دەستپێکە! 💪🔥";
+        const notifBody = "کاتی پشووی سێتەکەت تەواو بوو — ئێستا دەستپێکە بە سێتی دواتر!";
+        if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(notifTitle, {
+              body: notifBody,
+              icon: '/icon-192x192.png',
+              badge: '/icon-192x192.png',
+              vibrate: [400, 150, 400, 150, 600],
+              requireInteraction: true,
+              tag: 'bq-gym-rest-timer'
+            }).catch(() => {});
+          }).catch(() => {});
+        } else {
+          new Notification(notifTitle, {
+            body: notifBody,
+            icon: '/icon-192x192.png',
+            requireInteraction: true,
+            tag: 'bq-gym-rest-timer'
+          });
+        }
+      }
+    } catch (e) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soundEnabled]);
+
   useEffect(() => {
     let interval = null;
     if (restTimerRunning) {
+      if (!restTimerEndTimeRef.current) {
+        restTimerEndTimeRef.current = Date.now() + restTimerSeconds * 1000;
+      }
+      let lastTickSec = restTimerSeconds;
       interval = setInterval(() => {
-        setRestTimerSeconds(prev => {
-          if (prev <= 1) {
-            playTimerCompleteSound();
-            setRestTimerRunning(false);
-            setActiveTimerSet(null);
-            return 0;
-          }
-          if (prev === 4 || prev === 3 || prev === 2) {
+        const remainingMs = (restTimerEndTimeRef.current || Date.now()) - Date.now();
+        const nextSec = Math.max(0, Math.ceil(remainingMs / 1000));
+        if (nextSec <= 0) {
+          setRestTimerSeconds(0);
+          triggerRestTimerFinishedEffects();
+          return;
+        }
+        if (nextSec !== lastTickSec) {
+          lastTickSec = nextSec;
+          if (nextSec === 3 || nextSec === 2 || nextSec === 1) {
             playCountdownTick(920);
           }
-          return prev - 1;
-        });
-      }, 1000);
+          setRestTimerSeconds(nextSec);
+        }
+      }, 250);
+    } else {
+      restTimerEndTimeRef.current = null;
     }
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restTimerRunning, soundEnabled]);
+  }, [restTimerRunning, soundEnabled, triggerRestTimerFinishedEffects]);
+
+  // کاتێک یاریزان لە بەرنامەکە دەچێتە دەرەوە و دەگەڕێتەوە، کاتی ڕاستەقینە دەپشکنێت
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibility = () => {
+      if (!document.hidden && restTimerRunning && restTimerEndTimeRef.current) {
+        const remainingMs = restTimerEndTimeRef.current - Date.now();
+        if (remainingMs <= 0) {
+          setRestTimerSeconds(0);
+          triggerRestTimerFinishedEffects();
+        } else {
+          setRestTimerSeconds(Math.ceil(remainingMs / 1000));
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [restTimerRunning, triggerRestTimerFinishedEffects]);
 
   const startRestTimer = (seconds) => {
-    setRestTimerTotal(seconds);
-    setRestTimerSeconds(seconds);
+    const secs = Number(seconds) || 60;
+    restTimerEndTimeRef.current = Date.now() + secs * 1000;
+    setRestTimerTotal(secs);
+    setRestTimerSeconds(secs);
     setRestTimerRunning(true);
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (e) {}
   };
 
   const handleUpdateSetLog = (exerciseName, setIdx, field, value) => {
@@ -2155,7 +2370,7 @@ export default function App() {
         }
       } catch (e) {}
       setSelectedDayIdx(getTodayDayIdx());
-      setCompletedDayIndices([getTodayDayIdx()]);
+      setCompletedDayIndices([]);
       setShowNewCourseModal(false);
       playSparkleSound();
     } catch (err) {
@@ -2501,7 +2716,7 @@ export default function App() {
             setWorkoutCourse(generated);
             setProfile(updated);
             setSelectedDayIdx(getTodayDayIdx());
-            setCompletedDayIndices([getTodayDayIdx()]);
+            setCompletedDayIndices([]);
           } else {
             alert(t('noInternetWorkoutAlert'));
             setActionLoadingState({ active: false, message: '', actionType: '' });
@@ -2867,7 +3082,7 @@ export default function App() {
     { id: 'f_kebab_meat', name: 'کەبابی گۆشتی کوردی (هەولێری / سلێمانی)', englishName: 'Kurdish Lamb & Beef Kebab', category: 'kurdish', baseCalories: 260, baseProtein: 22, baseCarbs: 2, baseFat: 19, usageCount: 95, icon: <><Beef size={16} className="inline-block" /></>, units: [{ name: 'شیش', ratio: 100 }, { name: 'گرام', ratio: 1 }], aliases: ['کەباب', 'کەبابی گۆشت', 'كباب عراقي', 'كباب لحم', 'kebab'] },
     { id: 'f_kebab_chicken', name: 'کەباب و شیشی مریشک (تاووک)', englishName: 'Chicken Shish Kabab', category: 'protein', baseCalories: 190, baseProtein: 24, baseCarbs: 2, baseFat: 9, usageCount: 75, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'شیش', ratio: 120 }, { name: 'گرام', ratio: 1 }], aliases: ['کەبابی مریشک', 'شیشی مریشک', 'شيش طاووق'] },
     { id: 'f_tikka_meat', name: 'تیکەی گۆشتی بەرخ (برژاو لەسەر خەڵوز)', englishName: 'Grilled Lamb Tikka', category: 'protein', baseCalories: 240, baseProtein: 26, baseCarbs: 0.5, baseFat: 15, usageCount: 65, icon: <><Beef size={16} className="inline-block" /></>, units: [{ name: 'شیش', ratio: 100 }, { name: 'گرام', ratio: 1 }], aliases: ['تیکە', 'تیکەی گۆشت', 'تكة لحم'] },
-    { id: 'f_chicken_breast', name: 'سنگی مریشکی برژاو', englishName: 'Grilled Chicken Breast', category: 'protein', baseCalories: 165, baseProtein: 31, baseCarbs: 0, baseFat: 3.6, usageCount: 99, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'گرام', ratio: 1 }, { name: 'پارچە', ratio: 150 }, { name: 'قاپ', ratio: 200 }], aliases: ['سنگی مریشک', 'مریشک', 'صدر دجاج', 'chicken breast'] },
+    { id: 'f_chicken_breast', name: 'سنگی مریشکی برژاو', englishName: 'Grilled Chicken Breast', category: 'protein', baseCalories: 165, baseProtein: 31, baseCarbs: 0, baseFat: 3.6, usageCount: 99, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'پارچە', ratio: 150 }, { name: 'قاپ', ratio: 200 }, { name: 'گرام', ratio: 1 }], aliases: ['سنگی مریشک', 'مریشک', 'صدر دجاج', 'chicken breast'] },
     { id: 'f_chicken_charcoal', name: 'مریشکی برژاوی سەر خەڵوز (خۆماڵی)', englishName: 'Charcoal Grilled Chicken', category: 'kurdish', baseCalories: 215, baseProtein: 27, baseCarbs: 0, baseFat: 11.5, usageCount: 60, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'پارچە', ratio: 200 }, { name: 'گرام', ratio: 1 }], aliases: ['مریشکی خەڵوز', 'دجاج فحم', 'مریشکی برژاو'] },
     { id: 'f_shawarma_beef', name: 'شاوەرمای گۆشتی سوور (کەسە تەڕ)', englishName: 'Beef Shawarma Meat', category: 'kurdish', baseCalories: 235, baseProtein: 24, baseCarbs: 3, baseFat: 14, usageCount: 62, icon: <><Beef size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['شاوەرما', 'شاوەرمای گۆشت', 'گەس', 'شاورما لحم', 'shawarma'] },
     { id: 'f_shawarma_chicken', name: 'شاوەرمای مریشک (گەسی مریشک)', englishName: 'Chicken Shawarma Meat', category: 'kurdish', baseCalories: 205, baseProtein: 25, baseCarbs: 2, baseFat: 10.5, usageCount: 68, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['شاوەرمای مریشک', 'گەسی مریشک', 'شاورما دجاج'] },
@@ -2895,7 +3110,7 @@ export default function App() {
     { id: 'f_bread_toast', name: 'نانی تۆستی قاوەیی / برۆن', englishName: 'Brown Whole Wheat Toast', category: 'carbs', baseCalories: 245, baseProtein: 9.5, baseCarbs: 44, baseFat: 2.5, usageCount: 65, icon: <><Cookie size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 35 }, { name: 'گرام', ratio: 1 }], aliases: ['تۆست', 'تۆستی قاوەیی', 'توست اسمر'] },
 
     // شیرەمەنی، هێلکە و خوانی بەیانی (Dairy, Eggs & Breakfast)
-    { id: 'f_boiled_egg', name: 'هێلکەی کوڵاو', englishName: 'Boiled Egg', category: 'protein', baseCalories: 143, baseProtein: 13, baseCarbs: 1, baseFat: 10, usageCount: 99, icon: <><Egg size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 50 }, { name: 'گرام', ratio: 1 }], aliases: ['هێلکە', 'هێلکەی کوڵاو', 'بيض مسلوق', 'egg'] },
+    { id: 'f_boiled_egg', name: 'هێلکەی کوڵاو', englishName: 'Boiled Egg', category: 'protein', baseCalories: 143, baseProtein: 13, baseCarbs: 1, baseFat: 10, usageCount: 99, icon: <><Egg size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 55 }, { name: 'گرام', ratio: 1 }], aliases: ['هێلکە', 'هێلکەی کوڵاو', 'بيض مسلوق', 'egg'] },
     { id: 'f_egg_qawrma', name: 'هێلکەی قاورمە (هێلکە بە قاورمەی کوردی)', englishName: 'Eggs with Kurdish Qawrma', category: 'kurdish', baseCalories: 270, baseProtein: 22, baseCarbs: 1, baseFat: 20, usageCount: 55, icon: <><Egg size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['هێلکە قاورمە', 'قاورمە', 'بيض بالقاورمة'] },
     { id: 'f_egg_tomato', name: 'مەخمەری کوردی بە تەماتە (شەشکشووکە)', englishName: 'Eggs with Tomatoes', category: 'kurdish', baseCalories: 140, baseProtein: 8.5, baseCarbs: 5, baseFat: 9.5, usageCount: 60, icon: <><Egg size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 180 }, { name: 'گرام', ratio: 1 }], aliases: ['مەخمەر بە تەماتە', 'شەشکشووکە', 'شكشوكة', 'مەخمەر'] },
     { id: 'f_yogurt_homemade', name: 'ماستی ماڵەوەی کوردی', englishName: 'Homemade Kurdish Yogurt', category: 'kurdish', baseCalories: 61, baseProtein: 3.5, baseCarbs: 4.7, baseFat: 3.3, usageCount: 90, icon: <><Milk size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 200 }, { name: 'کەوچک', ratio: 25 }, { name: 'گرام', ratio: 1 }], aliases: ['ماست', 'ماستی ماڵەوە', 'لبن خاثر', 'زبادي'] },
@@ -2928,9 +3143,52 @@ export default function App() {
 
     // میوە، وشکەمیوە، چەرەزات و شیرینی (Fruits, Nuts & Sweets)
     { id: 'f_dates', name: 'خورمای کوردی / عێراقی', englishName: 'Iraqi & Kurdish Dates', category: 'fruits', baseCalories: 277, baseProtein: 1.8, baseCarbs: 75, baseFat: 0.2, usageCount: 88, icon: <><Apple size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 15 }, { name: 'دەستە', ratio: 50 }, { name: 'گرام', ratio: 1 }], aliases: ['خورما', 'خوما', 'تمر', 'dates'] },
-    { id: 'f_pomegranate', name: 'هەناری کوردی (هەڵەبجە / شارەزوور)', englishName: 'Kurdish Pomegranate', category: 'fruits', baseCalories: 83, baseProtein: 1.7, baseCarbs: 19, baseFat: 1.2, usageCount: 70, icon: <><Apple size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 200 }, { name: 'قاپ', ratio: 150 }], aliases: ['هەنار', 'رمان', 'pomegranate'] },
-    { id: 'f_banana', name: 'مۆز', englishName: 'Banana', category: 'fruits', baseCalories: 89, baseProtein: 1.1, baseCarbs: 23, baseFat: 0.3, usageCount: 85, icon: <><Banana size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 120 }, { name: 'گرام', ratio: 1 }], aliases: ['مۆز', 'موز', 'banana'] },
-    { id: 'f_apple', name: 'سێو', englishName: 'Apple', category: 'fruits', baseCalories: 52, baseProtein: 0.3, baseCarbs: 14, baseFat: 0.2, usageCount: 80, icon: <><Apple size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['سێو', 'تفاح', 'apple'] },
+    { id: 'f_pomegranate', name: 'هەنار (هەناری کوردی / هەڵەبجە)', englishName: 'Kurdish Pomegranate', category: 'fruits', baseCalories: 83, baseProtein: 1.7, baseCarbs: 19, baseFat: 1.2, usageCount: 92, icon: <><Apple size={16} className="inline-block text-rose-500" /></>, units: [{ name: 'دانە', ratio: 250 }, { name: 'قاپ', ratio: 160 }, { name: 'گرام', ratio: 1 }], aliases: ['هەنار', 'هەناری کوردی', 'رمان', 'pomegranate'] },
+    { id: 'f_banana', name: 'مۆز', englishName: 'Banana', category: 'fruits', baseCalories: 89, baseProtein: 1.1, baseCarbs: 23, baseFat: 0.3, usageCount: 90, icon: <><Banana size={16} className="inline-block text-yellow-400" /></>, units: [{ name: 'دانە', ratio: 120 }, { name: 'گرام', ratio: 1 }], aliases: ['مۆز', 'موز', 'banana'] },
+    { id: 'f_apple', name: 'سێو', englishName: 'Apple', category: 'fruits', baseCalories: 52, baseProtein: 0.3, baseCarbs: 14, baseFat: 0.2, usageCount: 88, icon: <><Apple size={16} className="inline-block text-red-400" /></>, units: [{ name: 'دانە', ratio: 180 }, { name: 'گرام', ratio: 1 }], aliases: ['سێو', 'تفاح', 'apple'] },
+    { id: 'f_orange', name: 'پرتەقاڵ', englishName: 'Fresh Orange', category: 'fruits', baseCalories: 47, baseProtein: 0.9, baseCarbs: 11.8, baseFat: 0.1, usageCount: 86, icon: <><Apple size={16} className="inline-block text-orange-400" /></>, units: [{ name: 'دانە', ratio: 180 }, { name: 'گرام', ratio: 1 }], aliases: ['پرتەقاڵ', 'پرتەقال', 'برتقال', 'orange'] },
+    { id: 'f_mandarin', name: 'لالەنگی / مەندەلین', englishName: 'Mandarin / Tangerine', category: 'fruits', baseCalories: 53, baseProtein: 0.8, baseCarbs: 13.3, baseFat: 0.3, usageCount: 82, icon: <><Apple size={16} className="inline-block text-amber-400" /></>, units: [{ name: 'دانە', ratio: 100 }, { name: 'گرام', ratio: 1 }], aliases: ['لالەنگی', 'مەندەلین', 'يوسفي', 'لالنكي', 'mandarin', 'tangerine'] },
+    { id: 'f_watermelon', name: 'شووتی', englishName: 'Watermelon', category: 'fruits', baseCalories: 30, baseProtein: 0.6, baseCarbs: 7.6, baseFat: 0.2, usageCount: 85, icon: <><Apple size={16} className="inline-block text-rose-400" /></>, units: [{ name: 'پارچە', ratio: 280 }, { name: 'قاپ', ratio: 200 }, { name: 'گرام', ratio: 1 }], aliases: ['شووتی', 'شوتی', 'رقي', 'بطيخ', 'watermelon'] },
+    { id: 'f_melon', name: 'کاڵەک / گندۆرە', englishName: 'Sweet Melon / Cantaloupe', category: 'fruits', baseCalories: 34, baseProtein: 0.8, baseCarbs: 8.2, baseFat: 0.2, usageCount: 78, icon: <><Apple size={16} className="inline-block text-yellow-300" /></>, units: [{ name: 'پارچە', ratio: 220 }, { name: 'قاپ', ratio: 180 }, { name: 'گرام', ratio: 1 }], aliases: ['کاڵەک', 'گندۆرە', 'بطيخ اصفر', 'شمام', 'melon', 'cantaloupe'] },
+    { id: 'f_grapes', name: 'ترێ (ترێی سپی و ڕەش)', englishName: 'Fresh Grapes', category: 'fruits', baseCalories: 69, baseProtein: 0.7, baseCarbs: 18, baseFat: 0.2, usageCount: 80, icon: <><Apple size={16} className="inline-block text-purple-400" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'دەستە', ratio: 100 }, { name: 'گرام', ratio: 1 }], aliases: ['ترێ', 'عنب', 'grapes'] },
+    { id: 'f_strawberry', name: 'شلیک / فەراولە', englishName: 'Fresh Strawberries', category: 'fruits', baseCalories: 32, baseProtein: 0.7, baseCarbs: 7.7, baseFat: 0.3, usageCount: 82, icon: <><Apple size={16} className="inline-block text-pink-500" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'دانە', ratio: 20 }, { name: 'گرام', ratio: 1 }], aliases: ['شلیک', 'فەراولە', 'فراولة', 'strawberry'] },
+    { id: 'f_kiwi', name: 'کیوی', englishName: 'Kiwi Fruit', category: 'fruits', baseCalories: 61, baseProtein: 1.1, baseCarbs: 15, baseFat: 0.5, usageCount: 76, icon: <><Apple size={16} className="inline-block text-lime-400" /></>, units: [{ name: 'دانە', ratio: 85 }, { name: 'گرام', ratio: 1 }], aliases: ['کیوی', 'كيوي', 'kiwi'] },
+    { id: 'f_peach', name: 'قۆخ / هۆڵۆ', englishName: 'Fresh Peach', category: 'fruits', baseCalories: 39, baseProtein: 0.9, baseCarbs: 9.5, baseFat: 0.3, usageCount: 75, icon: <><Apple size={16} className="inline-block text-amber-300" /></>, units: [{ name: 'دانە', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['قۆخ', 'هۆڵۆ', 'خوخ', 'دراق', 'peach'] },
+    { id: 'f_pear', name: 'هەرمێ', englishName: 'Fresh Pear', category: 'fruits', baseCalories: 57, baseProtein: 0.4, baseCarbs: 15, baseFat: 0.1, usageCount: 74, icon: <><Apple size={16} className="inline-block text-emerald-300" /></>, units: [{ name: 'دانە', ratio: 175 }, { name: 'گرام', ratio: 1 }], aliases: ['هەرمێ', 'عرموط', 'كمثرى', 'pear'] },
+    { id: 'f_apricot', name: 'قەیسی تازە', englishName: 'Fresh Apricot', category: 'fruits', baseCalories: 48, baseProtein: 1.4, baseCarbs: 11, baseFat: 0.4, usageCount: 70, icon: <><Apple size={16} className="inline-block text-amber-400" /></>, units: [{ name: 'دانە', ratio: 45 }, { name: 'گرام', ratio: 1 }], aliases: ['قەیسی', 'مشمش', 'apricot'] },
+    { id: 'f_fig', name: 'هەنجیری کوردی', englishName: 'Fresh Kurdish Fig', category: 'fruits', baseCalories: 74, baseProtein: 0.8, baseCarbs: 19, baseFat: 0.3, usageCount: 74, icon: <><Apple size={16} className="inline-block text-purple-300" /></>, units: [{ name: 'دانە', ratio: 60 }, { name: 'گرام', ratio: 1 }], aliases: ['هەنجیر', 'تين', 'fig'] },
+    { id: 'f_plum', name: 'هەڵوژە', englishName: 'Fresh Plum', category: 'fruits', baseCalories: 46, baseProtein: 0.7, baseCarbs: 11.4, baseFat: 0.3, usageCount: 70, icon: <><Apple size={16} className="inline-block text-indigo-400" /></>, units: [{ name: 'دانە', ratio: 65 }, { name: 'گرام', ratio: 1 }], aliases: ['هەڵوژە', 'عنجاص', 'گوجه سبز', 'plum'] },
+    { id: 'f_pineapple', name: 'ئەناناس', englishName: 'Fresh Pineapple', category: 'fruits', baseCalories: 50, baseProtein: 0.5, baseCarbs: 13, baseFat: 0.1, usageCount: 72, icon: <><Apple size={16} className="inline-block text-yellow-400" /></>, units: [{ name: 'پارچە', ratio: 120 }, { name: 'قاپ', ratio: 165 }, { name: 'گرام', ratio: 1 }], aliases: ['ئەناناس', 'اناناس', 'pineapple'] },
+    { id: 'f_mango', name: 'مانگۆ', englishName: 'Fresh Mango', category: 'fruits', baseCalories: 60, baseProtein: 0.8, baseCarbs: 15, baseFat: 0.4, usageCount: 75, icon: <><Apple size={16} className="inline-block text-amber-500" /></>, units: [{ name: 'دانە', ratio: 200 }, { name: 'قاپ', ratio: 165 }, { name: 'گرام', ratio: 1 }], aliases: ['مانگۆ', 'مانجو', 'mango'] },
+    { id: 'f_avocado', name: 'ئەڤۆکادۆ', englishName: 'Fresh Avocado', category: 'fruits', baseCalories: 160, baseProtein: 2, baseCarbs: 8.5, baseFat: 14.7, usageCount: 80, icon: <><Apple size={16} className="inline-block text-emerald-500" /></>, units: [{ name: 'دانە', ratio: 150 }, { name: 'پارچە', ratio: 75 }, { name: 'گرام', ratio: 1 }], aliases: ['ئەڤۆکادۆ', 'افوكادو', 'avocado'] },
+    { id: 'f_cherries', name: 'گێلاس', englishName: 'Sweet Cherries', category: 'fruits', baseCalories: 63, baseProtein: 1.1, baseCarbs: 16, baseFat: 0.2, usageCount: 68, icon: <><Apple size={16} className="inline-block text-rose-600" /></>, units: [{ name: 'قاپ', ratio: 140 }, { name: 'دەستە', ratio: 70 }, { name: 'گرام', ratio: 1 }], aliases: ['گێلاس', 'كرز', 'cherry', 'cherries'] },
+    { id: 'f_mulberries', name: 'توو (تووی سپی و سوور)', englishName: 'Fresh Mulberries', category: 'fruits', baseCalories: 43, baseProtein: 1.4, baseCarbs: 9.8, baseFat: 0.4, usageCount: 68, icon: <><Apple size={16} className="inline-block text-purple-300" /></>, units: [{ name: 'قاپ', ratio: 140 }, { name: 'دەستە', ratio: 70 }, { name: 'گرام', ratio: 1 }], aliases: ['توو', 'توت', 'mulberry'] },
+    { id: 'f_cucumber', name: 'خەیار', englishName: 'Fresh Cucumber', category: 'fruits', baseCalories: 15, baseProtein: 0.7, baseCarbs: 3.6, baseFat: 0.1, usageCount: 92, icon: <><Salad size={16} className="inline-block text-emerald-400" /></>, units: [{ name: 'دانە', ratio: 120 }, { name: 'گرام', ratio: 1 }], aliases: ['خەیار', 'خيار', 'cucumber'] },
+    { id: 'f_tomato', name: 'تەماتە', englishName: 'Fresh Tomato', category: 'fruits', baseCalories: 18, baseProtein: 0.9, baseCarbs: 3.9, baseFat: 0.2, usageCount: 90, icon: <><Salad size={16} className="inline-block text-red-500" /></>, units: [{ name: 'دانە', ratio: 130 }, { name: 'گرام', ratio: 1 }], aliases: ['تەماتە', 'طماطة', 'طماطم', 'tomato'] },
+    { id: 'f_carrot', name: 'گێزەر', englishName: 'Fresh Carrot', category: 'fruits', baseCalories: 41, baseProtein: 0.9, baseCarbs: 9.6, baseFat: 0.2, usageCount: 82, icon: <><Salad size={16} className="inline-block text-orange-400" /></>, units: [{ name: 'دانە', ratio: 80 }, { name: 'گرام', ratio: 1 }], aliases: ['گێزەر', 'جزر', 'carrot'] },
+    { id: 'f_broccoli', name: 'برۆکلی کوڵاو / هەڵمکراو', englishName: 'Steamed Broccoli', category: 'fruits', baseCalories: 35, baseProtein: 2.4, baseCarbs: 7.2, baseFat: 0.4, usageCount: 84, icon: <><Salad size={16} className="inline-block text-green-500" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['برۆکلی', 'بروكلي', 'broccoli'] },
+    { id: 'f_cauliflower', name: 'قەڕنابیت', englishName: 'Cauliflower', category: 'fruits', baseCalories: 25, baseProtein: 1.9, baseCarbs: 5, baseFat: 0.3, usageCount: 72, icon: <><Salad size={16} className="inline-block text-slate-200" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['قەڕنابیت', 'قرنابيط', 'cauliflower'] },
+    { id: 'f_bell_pepper', name: 'بیبەری سەوز و ڕەنگاوڕەنگ', englishName: 'Bell Pepper', category: 'fruits', baseCalories: 26, baseProtein: 1, baseCarbs: 6, baseFat: 0.3, usageCount: 76, icon: <><Salad size={16} className="inline-block text-lime-500" /></>, units: [{ name: 'دانە', ratio: 110 }, { name: 'گرام', ratio: 1 }], aliases: ['بیبەر', 'فلفل بارد', 'bell pepper'] },
+    { id: 'f_lettuce', name: 'کاهوو / خاس', englishName: 'Fresh Lettuce', category: 'fruits', baseCalories: 15, baseProtein: 1.4, baseCarbs: 2.9, baseFat: 0.2, usageCount: 80, icon: <><Salad size={16} className="inline-block text-green-400" /></>, units: [{ name: 'قاپ', ratio: 100 }, { name: 'گرام', ratio: 1 }], aliases: ['کاهوو', 'خاس', 'خس', 'lettuce'] },
+    { id: 'f_mushrooms', name: 'قارچک / کوارگ', englishName: 'Mushrooms', category: 'fruits', baseCalories: 22, baseProtein: 3.1, baseCarbs: 3.3, baseFat: 0.3, usageCount: 75, icon: <><Salad size={16} className="inline-block text-stone-300" /></>, units: [{ name: 'قاپ', ratio: 120 }, { name: 'گرام', ratio: 1 }], aliases: ['قارچک', 'کوارگ', 'فطر', 'mushroom'] },
+    { id: 'f_sweet_corn', name: 'گەنمەشامی کوڵاو', englishName: 'Boiled Sweet Corn', category: 'carbs', baseCalories: 96, baseProtein: 3.4, baseCarbs: 21, baseFat: 1.5, usageCount: 78, icon: <><Wheat size={16} className="inline-block text-yellow-400" /></>, units: [{ name: 'دانە', ratio: 140 }, { name: 'قاپ', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['گەنمەشامی', 'ذرة', 'sweet corn'] },
+    { id: 'f_rice_plain', name: 'برنجی سپی کوڵاو (بێ ڕۆن)', englishName: 'Plain Boiled White Rice', category: 'carbs', baseCalories: 130, baseProtein: 2.7, baseCarbs: 28, baseFat: 0.3, usageCount: 96, icon: <><Utensils size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 200 }, { name: 'کەوچک', ratio: 25 }, { name: 'گرام', ratio: 1 }], aliases: ['برنجی کوڵاو', 'برنجی بێ ڕۆن', 'رز مسلوق', 'boiled rice'] },
+    { id: 'f_rice_brown', name: 'برنجی قاوەیی (تەندروست)', englishName: 'Cooked Brown Rice', category: 'carbs', baseCalories: 112, baseProtein: 2.6, baseCarbs: 23.5, baseFat: 0.9, usageCount: 85, icon: <><Wheat size={16} className="inline-block text-amber-500" /></>, units: [{ name: 'قاپ', ratio: 200 }, { name: 'کەوچک', ratio: 25 }, { name: 'گرام', ratio: 1 }], aliases: ['برنجی قاوەیی', 'برنجی بۆر', 'رز بني', 'brown rice'] },
+    { id: 'f_rice_basmati', name: 'برنجی بەسمەتی کوڵاو', englishName: 'Cooked Basmati Rice', category: 'carbs', baseCalories: 121, baseProtein: 3.5, baseCarbs: 25.2, baseFat: 0.4, usageCount: 90, icon: <><Utensils size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 200 }, { name: 'کەوچک', ratio: 25 }, { name: 'گرام', ratio: 1 }], aliases: ['برنجی بەسمەتی', 'رز بسمتي', 'basmati rice'] },
+    { id: 'f_pasta_cooked', name: 'مەعکەرۆنی / پاستا بە سۆس', englishName: 'Cooked Pasta / Macaroni', category: 'carbs', baseCalories: 158, baseProtein: 5.8, baseCarbs: 31, baseFat: 1.2, usageCount: 88, icon: <><Utensils size={16} className="inline-block text-amber-400" /></>, units: [{ name: 'قاپ', ratio: 200 }, { name: 'کەوچک', ratio: 25 }, { name: 'گرام', ratio: 1 }], aliases: ['مەعکەرۆنی', 'ماکەرۆنی', 'پاستا', 'معكرونة', 'pasta', 'macaroni'] },
+    { id: 'f_sweet_potato', name: 'پەتاتەی شیرین (Sweet Potato)', englishName: 'Baked Sweet Potato', category: 'carbs', baseCalories: 90, baseProtein: 2, baseCarbs: 20.7, baseFat: 0.2, usageCount: 82, icon: <><Cookie size={16} className="inline-block text-orange-400" /></>, units: [{ name: 'دانە', ratio: 150 }, { name: 'گرام', ratio: 1 }], aliases: ['پەتاتەی شیرین', 'بطاطا حلوة', 'sweet potato'] },
+    { id: 'f_boiled_chickpeas', name: 'نۆکی کوڵاو (لەبلەبی)', englishName: 'Boiled Chickpeas (Lablabi)', category: 'carbs', baseCalories: 164, baseProtein: 8.9, baseCarbs: 27.4, baseFat: 2.6, usageCount: 85, icon: <><Bean size={16} className="inline-block text-amber-300" /></>, units: [{ name: 'قاپ', ratio: 200 }, { name: 'کاسە', ratio: 250 }, { name: 'گرام', ratio: 1 }], aliases: ['لەبلەبی', 'نۆکی کوڵاو', 'لبلبي', 'حمص مسلوق', 'chickpeas'] },
+    { id: 'f_indomie', name: 'ئندۆمی / نۆدڵز', englishName: 'Prepared Instant Noodles (Indomie)', category: 'carbs', baseCalories: 188, baseProtein: 4.5, baseCarbs: 27, baseFat: 7, usageCount: 80, icon: <><Utensils size={16} className="inline-block text-yellow-400" /></>, units: [{ name: 'پاکەت', ratio: 85 }, { name: 'قاپ', ratio: 220 }, { name: 'گرام', ratio: 1 }], aliases: ['ئندۆمی', 'نۆدڵز', 'اندومي', 'indomie', 'noodles'] },
+    { id: 'f_egg_white', name: 'سپێنەی هێلکەی کوڵاو', englishName: 'Boiled Egg White', category: 'protein', baseCalories: 52, baseProtein: 11, baseCarbs: 0.7, baseFat: 0.2, usageCount: 92, icon: <><Egg size={16} className="inline-block text-slate-100" /></>, units: [{ name: 'دانە', ratio: 35 }, { name: 'گرام', ratio: 1 }], aliases: ['سپێنەی هێلکە', 'بياض البيض', 'egg white'] },
+    { id: 'f_egg_fried', name: 'هێلکەی سوورکراوە (ئۆملێت)', englishName: 'Fried Egg / Omelette', category: 'protein', baseCalories: 196, baseProtein: 13.6, baseCarbs: 0.8, baseFat: 15, usageCount: 90, icon: <><Egg size={16} className="inline-block text-amber-400" /></>, units: [{ name: 'دانە', ratio: 55 }, { name: 'قاپ', ratio: 120 }, { name: 'گرام', ratio: 1 }], aliases: ['هێلکەی سوورکراوە', 'ئۆملێت', 'بيض مقلي', 'omelette', 'fried egg'] },
+    { id: 'f_chicken_thigh', name: 'ڕانی مریشکی برژاو یان کوڵاو', englishName: 'Cooked Chicken Thigh', category: 'protein', baseCalories: 209, baseProtein: 26, baseCarbs: 0, baseFat: 10.9, usageCount: 88, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'پارچە', ratio: 130 }, { name: 'گرام', ratio: 1 }], aliases: ['ڕانی مریشک', 'فخذ دجاج', 'chicken thigh'] },
+    { id: 'f_chicken_wings', name: 'باڵی مریشکی برژاو', englishName: 'Grilled Chicken Wings', category: 'protein', baseCalories: 203, baseProtein: 30, baseCarbs: 0, baseFat: 8.1, usageCount: 82, icon: <><Drumstick size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 45 }, { name: 'قاپ', ratio: 180 }, { name: 'گرام', ratio: 1 }], aliases: ['باڵی مریشک', 'اجنحة دجاج', 'chicken wings'] },
+    { id: 'f_minced_beef', name: 'قیمەی گۆشتی سوور (برژاو / سوورکراوە)', englishName: 'Cooked Minced Beef', category: 'protein', baseCalories: 250, baseProtein: 26, baseCarbs: 0, baseFat: 15, usageCount: 85, icon: <><Beef size={16} className="inline-block" /></>, units: [{ name: 'قاپ', ratio: 150 }, { name: 'کەوچک', ratio: 25 }, { name: 'گرام', ratio: 1 }], aliases: ['قیمە', 'قیمەی گۆشت', 'قيمه', 'لحم مفروم', 'minced beef'] },
+    { id: 'f_beef_steak', name: 'ستێکی گۆشتی مانگا', englishName: 'Grilled Beef Steak', category: 'protein', baseCalories: 252, baseProtein: 27, baseCarbs: 0, baseFat: 15, usageCount: 84, icon: <><Beef size={16} className="inline-block" /></>, units: [{ name: 'پارچە', ratio: 200 }, { name: 'گرام', ratio: 1 }], aliases: ['ستێک', 'ستێکی گۆشت', 'ستيك لحم', 'steak'] },
+    { id: 'f_peanut_butter', name: 'کەرەی عەلی بابا (Peanut Butter)', englishName: 'Natural Peanut Butter', category: 'protein', baseCalories: 588, baseProtein: 25, baseCarbs: 20, baseFat: 50, usageCount: 88, icon: <><Cookie size={16} className="inline-block text-amber-600" /></>, units: [{ name: 'کەوچک', ratio: 16 }, { name: 'گرام', ratio: 1 }], aliases: ['کەرەی عەلی بابا', 'پینەت بەتەر', 'زبدة الفول السوداني', 'peanut butter'] },
+    { id: 'f_honey', name: 'هەنگوینی سروشتی کوردستان', englishName: 'Natural Kurdish Honey', category: 'sweets', baseCalories: 304, baseProtein: 0.3, baseCarbs: 82, baseFat: 0, usageCount: 88, icon: <><Droplet size={16} className="inline-block text-amber-400" /></>, units: [{ name: 'کەوچک', ratio: 21 }, { name: 'گرام', ratio: 1 }], aliases: ['هەنگوین', 'عسل', 'honey'] },
+    { id: 'f_butter_natural', name: 'کەرەی خۆماڵی / زبدە', englishName: 'Natural Dairy Butter', category: 'kurdish', baseCalories: 717, baseProtein: 0.9, baseCarbs: 0.1, baseFat: 81, usageCount: 80, icon: <><Milk size={16} className="inline-block text-yellow-200" /></>, units: [{ name: 'کەوچک', ratio: 14 }, { name: 'گرام', ratio: 1 }], aliases: ['کەرە', 'زبدە', 'زبدة', 'butter'] },
+    { id: 'f_kurdish_ghee', name: 'ڕۆنی کوردی خۆماڵی (ڕۆنی حەیوانی)', englishName: 'Kurdish Clarified Ghee', category: 'kurdish', baseCalories: 876, baseProtein: 0.3, baseCarbs: 0, baseFat: 99.5, usageCount: 78, icon: <><Droplet size={16} className="inline-block text-yellow-400" /></>, units: [{ name: 'کەوچک', ratio: 14 }, { name: 'گرام', ratio: 1 }], aliases: ['ڕۆنی کوردی', 'دهن حر', 'سمن بلدي', 'ghee'] },
     { id: 'f_walnuts', name: 'گوێزی خۆماڵی (گوێزی هەورامان)', englishName: 'Hawraman Walnuts', category: 'sweets', baseCalories: 654, baseProtein: 15, baseCarbs: 14, baseFat: 65, usageCount: 75, icon: <><Bean size={16} className="inline-block" /></>, units: [{ name: 'دانە', ratio: 10 }, { name: 'کەوچک', ratio: 15 }, { name: 'دەستە', ratio: 30 }], aliases: ['گوێز', 'جوز', 'walnut'] },
     { id: 'f_almonds', name: 'بادەمی خۆماڵی', englishName: 'Almonds', category: 'sweets', baseCalories: 579, baseProtein: 21, baseCarbs: 22, baseFat: 50, usageCount: 72, icon: <><Bean size={16} className="inline-block" /></>, units: [{ name: 'دەستە', ratio: 30 }, { name: 'کەوچک', ratio: 15 }, { name: 'گرام', ratio: 1 }], aliases: ['بادەم', 'لوز', 'almond'] },
     { id: 'f_pistachios', name: 'فستقی خۆماڵی', englishName: 'Pistachios', category: 'sweets', baseCalories: 562, baseProtein: 20, baseCarbs: 28, baseFat: 45, usageCount: 65, icon: <><Bean size={16} className="inline-block" /></>, units: [{ name: 'دەستە', ratio: 30 }, { name: 'کەوچک', ratio: 15 }], aliases: ['فستق', 'فستقی کوردی', 'فستق حلبي', 'pistachio'] },
@@ -3093,7 +3351,78 @@ export default function App() {
     { id: 'sw_pomegranate_molasses', name: 'دۆشاوی هەنار / ڕوب ڕمان', englishName: 'Sour Pomegranate Molasses', category: 'sweets', baseCalories: 260, baseProtein: 0.5, baseCarbs: 65, baseFat: 0, usageCount: 78, icon: <><Droplet size={16} className="inline-block text-rose-950" /></>, units: [{ name: 'کەوچک', ratio: 20 }], aliases: ['دۆشاوی هەنار', 'ڕوب ڕمان', 'دبس رمان', 'pomegranate molasses'] }
   ];
 
-  const filteredFoods = masterFoodList.filter(food => {
+  // ڕێکخستنی زیرەکانەی یەکەی ستاندارد، جیاکردنەوەی گرام و مل، و کێشی ستانداردی هەر خۆراکێک
+  const normalizeFoodUnitsAndWeight = (food) => {
+    if (!food) return food;
+    const rawName = ((food.name || '') + ' ' + (food.englishName || '')).toLowerCase();
+    const isLiquid = Boolean(
+      food.isLiquid ||
+      food.category === 'drinks' ||
+      ['prot_shake_8', 'f_olive_oil', 'sw_amba', 'sw_ketchup', 'sw_mayo', 'sw_mayo_light', 'sw_mustard', 'sw_pomegranate_molasses', 'sw_tahini_molasses'].includes(food.id) ||
+      rawName.includes('شەربەت') || rawName.includes('شیر') || rawName.includes('دۆ ') || rawName.includes('ئاو') ||
+      rawName.includes('قاوە') || rawName.includes('چا ') || rawName.includes('سۆدا') || rawName.includes('پێپسی') ||
+      rawName.includes('کۆلا') || rawName.includes('زەیت') || rawName.includes('juice') || rawName.includes('milk') ||
+      rawName.includes('water') || rawName.includes('coffee') || rawName.includes('tea') || rawName.includes('drink') ||
+      rawName.includes('shake') || rawName.includes('oil')
+    );
+
+    const isGrainOrPlateOnly = Boolean(
+      rawName.includes('برنج') || rawName.includes('ساوار') || rawName.includes('ساوەر') ||
+      rawName.includes('بریانی') || rawName.includes('مەقلووبە') || rawName.includes('شۆڤان') ||
+      rawName.includes('پاستا') || rawName.includes('مەعکەرۆنی') || rawName.includes('ماکەرۆنی') ||
+      rawName.includes('شلە') || rawName.includes('شۆربا') || rawName.includes('نیسکێنە') ||
+      rawName.includes('تەشریب') || rawName.includes('زەڵاتە') || rawName.includes('جاجک') ||
+      rawName.includes('تەبوولە') || rawName.includes('حومس') || rawName.includes('پاقلە') ||
+      rawName.includes('قیمە') || rawName.includes('لەبلەبی') ||
+      rawName.includes('rice') || rawName.includes('bulgur') || rawName.includes('biryani') ||
+      rawName.includes('oats') || rawName.includes('oatmeal') || rawName.includes('pasta') ||
+      rawName.includes('macaroni') || rawName.includes('stew') || rawName.includes('soup') ||
+      rawName.includes('salad')
+    );
+
+    const metricUnitName = isLiquid ? 'مل' : 'گرام';
+    const existingUnits = Array.isArray(food.units) ? food.units : [];
+
+    // لابردنی یەکەی گرام/مل لە سەرەتا و لابردنی یەکەی نەگونجاو وەک (دانە) بۆ برنج و شلە و خواردنەوە
+    const naturalUnits = existingUnits.filter(u => {
+      if (!u || !u.name) return false;
+      const uName = String(u.name).trim();
+      if (uName === 'گرام' || uName === 'g' || uName === 'مل' || uName === 'ml' || u.ratio === 1) return false;
+      if ((isGrainOrPlateOnly || isLiquid || food.category === 'protein_powders') && uName === 'دانە') return false;
+      return true;
+    });
+
+    if (naturalUnits.length === 0) {
+      if (isLiquid) {
+        naturalUnits.push({ name: 'گڵاس', ratio: 250 }, { name: 'کوپ', ratio: 200 });
+      } else if (food.category === 'protein_powders') {
+        naturalUnits.push({ name: 'سکۆپ', ratio: 30 });
+      } else if (isGrainOrPlateOnly) {
+        naturalUnits.push({ name: 'قاپ', ratio: 200 }, { name: 'کەوچک', ratio: 25 });
+      } else if (food.category === 'fruits') {
+        naturalUnits.push({ name: 'دانە', ratio: 160 });
+      } else if (food.category === 'protein') {
+        naturalUnits.push({ name: 'پارچە', ratio: 150 }, { name: 'قاپ', ratio: 200 });
+      } else {
+        naturalUnits.push({ name: 'قاپ', ratio: 200 });
+      }
+    }
+
+    const standardWeight = Number(food.standardWeight) || Number(naturalUnits[0]?.ratio) || (isLiquid ? 250 : 150);
+    const finalUnits = [...naturalUnits, { name: metricUnitName, ratio: 1 }];
+
+    return {
+      ...food,
+      isLiquid,
+      metricUnitName,
+      standardWeight,
+      units: finalUnits
+    };
+  };
+
+  const normalizedMasterFoodList = masterFoodList.map(normalizeFoodUnitsAndWeight);
+
+  const filteredFoods = normalizedMasterFoodList.filter(food => {
     const q = searchQuery.trim().toLowerCase();
 
     // فلتەری بەشەکان: لە کاتی نووسینی گەڕان بە هەموو بەشەکاندا دەگەڕێت بۆ دۆزینەوەی خێرا
@@ -3137,17 +3466,27 @@ export default function App() {
     return matchesSearch;
   });
 
-  const displayedFoods = searchQuery.trim() ? filteredFoods : filteredFoods.slice(0, visibleFoodCount);
+  const displayedFoods = searchQuery.trim() ? filteredFoods : filteredFoods.slice(0, Math.max(visibleFoodCount, 60));
 
-  // کردنەوەی پەنجەرەی دیاریکردنی ڕێژە
-  const openPortionSelector = (food) => {
-    const defaultUnits = (food.units && food.units.length > 0) 
-      ? food.units 
-      : [{ name: 'گرام', ratio: 1 }, { name: 'قاپ', ratio: 200 }, { name: 'دانە', ratio: 120 }];
-    
-    setSelectedFoodForPortion({ ...food, units: defaultUnits });
-    setPortionUnitObj(defaultUnits[0]);
-    setPortionQty(defaultUnits[0].name === 'گرام' ? 100 : 1);
+  // کردنەوەی پەنجەرەی دیاریکردنی ڕێژە بە ستانداردی خۆکاری هەر خۆراکێک
+  const openPortionSelector = (rawFood, preferredUnitName = null, preferredQty = null) => {
+    const food = normalizeFoodUnitsAndWeight(rawFood);
+    const defaultUnits = food.units;
+
+    let initialUnit = defaultUnits[0];
+    if (preferredUnitName) {
+      const matched = defaultUnits.find(u => u.name === preferredUnitName);
+      if (matched) initialUnit = matched;
+    }
+
+    const isMetric = (initialUnit.ratio === 1 || initialUnit.name === 'گرام' || initialUnit.name === 'مل' || initialUnit.name === 'g' || initialUnit.name === 'ml');
+    const initialQty = preferredQty !== null && preferredQty > 0
+      ? preferredQty
+      : (isMetric ? (food.standardWeight || 150) : 1);
+
+    setSelectedFoodForPortion(food);
+    setPortionUnitObj(initialUnit);
+    setPortionQty(initialQty);
     setPortionMealTarget(selectedMealType);
   };
 
@@ -3289,9 +3628,9 @@ export default function App() {
     } catch (e) {}
   };
 
-  // سیستەمی سیستەمی پێشکەوتوو بۆ دۆزینەوە و دروستکردنی خواردن
-  const handleAiFindFood = (queryText) => {
-    const query = (queryText || searchQuery || '').trim();
+  // سیستەمی پێشکەوتووی زیرەکی دەستکرد بۆ دۆزینەوە و دروستکردنی هەر خواردنێک
+  const handleAiFindFood = async (queryText) => {
+    const query = (queryText || aiCustomInput || searchQuery || '').trim();
     if (!query) {
       setShowAiFoodModal(true);
       return;
@@ -3299,80 +3638,113 @@ export default function App() {
 
     setIsAiProcessing(true);
 
-    setTimeout(() => {
+    try {
       let category = 'kurdish';
       let cal = 180;
       let p = 14;
       let c = 22;
       let f = 6;
       let icon = '✨';
+      let isLiquid = false;
+      let standardUnit = 'قاپ';
+      let standardWeight = 200;
+      let foodDisplayName = query;
+      let foodEngName = query;
 
       const q = query.toLowerCase();
-      if (q.includes('مریشک') || q.includes('chicken') || q.includes('گۆشت') || q.includes('meat') || q.includes('beef') || q.includes('تۆنە') || q.includes('پرۆتین') || q.includes('protein')) {
-        category = 'protein';
-        cal = 220;
-        p = 28;
-        c = 4;
-        f = 9;
-        icon = '🍗';
-      } else if (q.includes('برنج') || q.includes('شۆڤان') || q.includes('پەتاتە') || q.includes('نان') || q.includes('ماکەرۆنی') || q.includes('pasta') || q.includes('rice')) {
-        category = 'carbs';
-        cal = 160;
-        p = 4;
-        c = 34;
-        f = 1.5;
-        icon = '🍚';
-      } else if (q.includes('سێو') || q.includes('مۆز') || q.includes('پرتەقاڵ') || q.includes('سەوزە') || q.includes('salad') || q.includes('fruit')) {
-        category = 'fruits';
-        cal = 65;
-        p = 1;
-        c = 15;
-        f = 0.3;
-        icon = '🍎';
-      } else if (q.includes('چای') || q.includes('قاوە') || q.includes('شەربەت') || q.includes('ئاو') || q.includes('drink') || q.includes('coffee') || q.includes('tea')) {
-        category = 'drinks';
-        cal = 45;
-        p = 1;
-        c = 10;
-        f = 0;
-        icon = '☕';
-      } else if (q.includes('بریانی') || q.includes('دۆڵمە') || q.includes('یاپراخ') || q.includes('کفتە') || q.includes('قۆزی') || q.includes('شلە')) {
-        category = 'kurdish';
-        cal = 240;
-        p = 16;
-        c = 28;
-        f = 10;
-        icon = '🍲';
-      } else if (q.includes('پیتزا') || q.includes('بەرگەر') || q.includes('pizza') || q.includes('burger') || q.includes('شاورمە')) {
-        category = 'kurdish';
-        cal = 285;
-        p = 15;
-        c = 30;
-        f = 13;
-        icon = '🍔';
+      if (q.includes('مریشک') || q.includes('chicken') || q.includes('گۆشت') || q.includes('meat') || q.includes('beef') || q.includes('تۆنە') || q.includes('ماسی')) {
+        category = 'protein'; cal = 205; p = 27; c = 2; f = 9; icon = '🍗'; standardUnit = 'پارچە'; standardWeight = 160;
+      } else if (q.includes('هێلکە') || q.includes('egg')) {
+        category = 'protein'; cal = 143; p = 13; c = 1; f = 10; icon = '🥚'; standardUnit = 'دانە'; standardWeight = 55;
+      } else if (q.includes('برنج') || q.includes('شۆڤان') || q.includes('ماکەرۆنی') || q.includes('مەعکەرۆنی') || q.includes('پاستا') || q.includes('ساوار') || q.includes('pasta') || q.includes('rice')) {
+        category = 'carbs'; cal = 145; p = 3.5; c = 29; f = 1.8; icon = '🍚'; standardUnit = 'قاپ'; standardWeight = 200;
+      } else if (q.includes('هەنار') || q.includes('pomegranate')) {
+        category = 'fruits'; cal = 83; p = 1.7; c = 19; f = 1.2; icon = '🍎'; standardUnit = 'دانە'; standardWeight = 250;
+      } else if (q.includes('سێو') || q.includes('مۆز') || q.includes('پرتەقاڵ') || q.includes('خەیار') || q.includes('تەماتە') || q.includes('fruit')) {
+        category = 'fruits'; cal = 60; p = 1; c = 14; f = 0.3; icon = '🍎'; standardUnit = 'دانە'; standardWeight = 160;
+      } else if (q.includes('چای') || q.includes('قاوە') || q.includes('شەربەت') || q.includes('شیر') || q.includes('دۆ') || q.includes('ئاو') || q.includes('کۆلا') || q.includes('پێپسی') || q.includes('drink') || q.includes('juice') || q.includes('milk') || q.includes('coffee')) {
+        category = 'drinks'; cal = 48; p = 1.5; c = 10; f = 0.5; icon = '🥤'; isLiquid = true; standardUnit = 'گڵاس'; standardWeight = 250;
+      } else if (q.includes('پیتزا') || q.includes('بەرگەر') || q.includes('لەفە') || q.includes('ساندویچ') || q.includes('pizza') || q.includes('burger')) {
+        category = 'fastfood'; cal = 265; p = 13; c = 28; f = 12; icon = '🍔'; standardUnit = q.includes('پیتزا') ? 'پارچە' : 'دانە'; standardWeight = q.includes('پیتزا') ? 110 : 200;
       }
 
-      const newAiFood = {
+      if (typeof window !== 'undefined' && typeof window.callFreeAiTextEngine === 'function' && navigator.onLine !== false) {
+        try {
+          const aiRaw = await window.callFreeAiTextEngine(
+            'You are a Clinical Sports Nutritionist. Return ONLY valid JSON with exact nutritional values per 100g (or 100ml if liquid) and realistic single-serving unit/weight.',
+            `Analyze this food: "${query}".
+Return ONLY a JSON object with this exact structure:
+{
+  "name": "Kurdish Sorani name of the food",
+  "englishName": "English name",
+  "category": "protein | carbs | fruits | drinks | kurdish | fastfood | sweets | protein_powders",
+  "isLiquid": false,
+  "baseCalories": 165,
+  "baseProtein": 12,
+  "baseCarbs": 18,
+  "baseFat": 5,
+  "standardUnit": "دانە | قاپ | گڵاس | پارچە | کەوچک | سکۆپ | شیش | لەفە",
+  "standardWeight": 180,
+  "icon": "🍽️"
+}
+Rules:
+- Never use "دانە" for rice, grains, stews, soups, salads, or liquids! Use "قاپ" for rice/stews/salads and "گڵاس" for liquids.
+- "standardWeight" must be the realistic weight in grams (or ml if liquid) of 1 standardUnit (e.g. 1 Pomegranate = 250g, 1 Plate Rice = 200g, 1 Boiled Egg = 55g, 1 Glass Milk = 250ml).`,
+            true
+          );
+          const cleaned = aiRaw.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const fBrace = cleaned.indexOf('{');
+          const lBrace = cleaned.lastIndexOf('}');
+          if (fBrace !== -1 && lBrace !== -1) {
+            const parsed = JSON.parse(cleaned.substring(fBrace, lBrace + 1));
+            if (parsed && Number(parsed.baseCalories) >= 0) {
+              foodDisplayName = parsed.name || query;
+              foodEngName = parsed.englishName || query;
+              category = parsed.category || category;
+              isLiquid = Boolean(parsed.isLiquid || category === 'drinks');
+              cal = Math.round(Number(parsed.baseCalories) || cal);
+              p = Math.round((Number(parsed.baseProtein) || 0) * 10) / 10;
+              c = Math.round((Number(parsed.baseCarbs) || 0) * 10) / 10;
+              f = Math.round((Number(parsed.baseFat) || 0) * 10) / 10;
+              icon = parsed.icon || icon;
+              if (parsed.standardUnit) standardUnit = parsed.standardUnit;
+              if (Number(parsed.standardWeight) > 0) standardWeight = Math.round(Number(parsed.standardWeight));
+            }
+          }
+        } catch (aiErr) {
+          console.warn('AI food lookup fallback used:', aiErr);
+        }
+      }
+
+      const rawAiFood = {
         id: 'ai_' + Date.now(),
-        name: query,
-        englishName: `AI: ${query}`,
-        category: category,
+        name: foodDisplayName,
+        englishName: foodEngName,
+        category,
+        isLiquid,
         baseCalories: cal,
         baseProtein: p,
         baseCarbs: c,
         baseFat: f,
+        standardWeight,
         usageCount: 1,
-        icon: icon,
+        icon,
         isAiGenerated: true,
-        units: [{ name: 'گرام', ratio: 1 }, { name: 'قاپ', ratio: 200 }, { name: 'دانە', ratio: 120 }, { name: 'کەوچک', ratio: 20 }]
+        units: [
+          { name: standardUnit, ratio: standardWeight },
+          ...(isLiquid ? [{ name: 'مل', ratio: 1 }] : [{ name: 'گرام', ratio: 1 }])
+        ]
       };
 
-      setAiCustomFoods(prev => [newAiFood, ...prev]);
+      const normalizedNewFood = normalizeFoodUnitsAndWeight(rawAiFood);
+      setAiCustomFoods(prev => [normalizedNewFood, ...prev]);
       setIsAiProcessing(false);
       setShowAiFoodModal(false);
-      setSearchQuery(query);
-      openPortionSelector(newAiFood);
-    }, 400);
+      setAiCustomInput('');
+      openPortionSelector(normalizedNewFood);
+    } catch (e) {
+      setIsAiProcessing(false);
+    }
   };
 
   const toggleFinishDayWorkout = (idx) => {
@@ -3847,158 +4219,120 @@ export default function App() {
   };
 
   const renderFoodBank = () => {
+    const foodCategoriesList = [
+      { id: 'all', label: t('catAll') },
+      { id: 'protein_powders', label: t('catProteinPowders') },
+      { id: 'kurdish', label: t('catKurdish') },
+      { id: 'fastfood', label: t('catFastFood') },
+      { id: 'drinks', label: t('catDrinks') },
+      { id: 'protein', label: t('catProtein') },
+      { id: 'carbs', label: t('catCarbs') },
+      { id: 'fruits', label: t('catFruits') },
+      { id: 'sweets', label: t('catSweets') }
+    ];
+
     return (
       <div style={{ direction: currentLangConfig.dir }}>
-        {/* باڕی سێرچ لەگەڵ دوگمەی سیستەم بۆ دۆزینەوەی سەرجەم خواردنەکان */}
+        {/* پەنجەرەی فلتەری پۆلەکانی خۆراک کاتێک دوگمەی فلتەری سەرەوە دادەگیرێت */}
+        {showFoodCategoryFilter && (
+          <div className="dark-card" style={{ padding: '14px', marginBottom: '14px', border: '1.5px solid rgba(168, 85, 247, 0.45)', background: 'rgba(24, 28, 48, 0.96)' }}>
+            <div className="flex-between" style={{ marginBottom: '10px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#E9D5FF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <SlidersHorizontal size={14} color="#C084FC" />
+                <span>{currentLangConfig.code === 'en' ? 'Filter by Category' : currentLangConfig.code === 'ar' ? 'تصفية حسب الفئة' : currentLangConfig.code === 'fa' ? 'فیلتر بر اساس دسته‌بندی' : 'فیلتەرکردنی جۆری خۆراک'}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowFoodCategoryFilter(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+              {foodCategoriesList.map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(cat.id);
+                    setShowFoodCategoryFilter(false);
+                  }}
+                  className="liquid-pill"
+                  style={{
+                    padding: '7px 13px',
+                    borderRadius: '11px',
+                    border: selectedCategory === cat.id ? '1.5px solid #C084FC' : '1px solid var(--border-color)',
+                    background: selectedCategory === cat.id ? 'linear-gradient(135deg, #9333EA 0%, #6B21A8 100%)' : 'var(--card-subtle)',
+                    color: selectedCategory === cat.id ? '#ffffff' : 'var(--text-main)',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* باڕی گەڕان بەیەکگرتوویی لەگەڵ دوگمەی (+) لە تەنیشتی بۆ زیادکردنی خۆراک بە زیرەکی دەستکرد */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
             <input 
               type="text" 
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && searchQuery.trim()) handleAiFindFood(searchQuery); }}
-              placeholder={t('searchPlaceholder')}
-              style={{ width: '100%', padding: '14px 18px', borderRadius: '16px', fontSize: '13.5px' }}
+              placeholder={currentLangConfig.code === 'en' ? 'Search' : currentLangConfig.code === 'ar' ? 'بحث' : currentLangConfig.code === 'fa' ? 'جستجو' : 'گەڕان'}
+              style={{ width: '100%', padding: '13px 16px', borderRadius: '16px', fontSize: '14px' }}
             />
           </div>
 
-          {/* دوگمەی درەوشاوەی سیستەم لە تەنیشت سێرچ */}
+          {/* دوگمەی (+) بۆ کردنەوەی ویندۆی گەڕان و زیادکردنی هەر خۆراکێک بە ئەی ئای */}
           <button
-            onClick={() => handleAiFindFood(searchQuery)}
-            disabled={isAiProcessing}
+            type="button"
+            onClick={() => {
+              setAiCustomInput('');
+              setShowAiFoodModal(true);
+            }}
             style={{
-              background: 'var(--accent-gradient)',
+              background: 'linear-gradient(135deg, #9333EA 0%, #6B21A8 100%)',
               color: '#ffffff',
-              border: '1px solid var(--border-color)',
-              padding: '0 18px',
+              border: '1.5px solid #C084FC',
+              width: '48px',
               height: '48px',
               borderRadius: '16px',
-              fontSize: '13.5px',
-              fontWeight: '800',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 6px 20px var(--accent-glow)',
-              backdropFilter: 'blur(10px)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0
+              justifyContent: 'center',
+              boxShadow: '0 6px 18px rgba(147, 51, 234, 0.4)',
+              flexShrink: 0,
+              padding: 0
             }}
             title={t('aiFoodSearch')}
           >
-            <Sparkles size={16} color="var(--text-main)" />
-            <span>{isAiProcessing ? '...' : (currentLangConfig.code === 'en' ? 'System' : currentLangConfig.code === 'ar' ? 'النظام' : currentLangConfig.code === 'fa' ? 'سیستم' : 'سیستەم')}</span>
+            <Plus size={22} strokeWidth={2.8} color="#ffffff" />
           </button>
         </div>
 
-        {/* بەشەکان: تیرە پێچەوانەکراوەکان بۆ کاروسێل بەپێی RTL */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginBottom: '16px', gap: '6px' }}>
-          {/* دوگمەی تیری ڕاست (لە RTL دەچێتە لای ڕاستی شاشە) */}
-          <button
-            onClick={() => scrollCategories('right')}
-            className="liquid-pill"
-            title={currentLangConfig.code === 'en' ? 'Scroll Right' : currentLangConfig.code === 'ar' ? 'تحريك لليمين' : currentLangConfig.code === 'fa' ? 'حرکت به راست' : 'بردن بۆ ڕاست'}
-            style={{
-              width: '32px',
-              height: '34px',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              flexShrink: 0,
-              color: 'var(--color-calories)',
-              border: '1px solid var(--accent-glow)',
-              background: 'var(--accent-glow)'
-            }}
-          >
-            <ChevronRightIcon size={16} />
-          </button>
-
-          {/* لیستی بابەتەکان بێ سکرۆڵبار و بە تایبەتمەندی ڕاکێشان (Draggable Area) */}
-          <div 
-            ref={categoryScrollRef}
-            className="hide-scrollbar"
-            onMouseDown={handleMouseDown}
-            onMouseLeave={handleMouseLeave}
-            onMouseUp={handleMouseUp}
-            onMouseMove={handleMouseMove}
-            style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              overflowX: 'auto', 
-              padding: '2px 0', 
-              cursor: isMouseDown ? 'grabbing' : 'grab',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-              flex: 1
-            }}
-          >
-            {[
-              { id: 'all', label: t('catAll') },
-              { id: 'protein_powders', label: t('catProteinPowders') },
-              { id: 'kurdish', label: t('catKurdish') },
-              { id: 'fastfood', label: t('catFastFood') },
-              { id: 'drinks', label: t('catDrinks') },
-              { id: 'protein', label: t('catProtein') },
-              { id: 'carbs', label: t('catCarbs') },
-              { id: 'fruits', label: t('catFruits') },
-              { id: 'sweets', label: t('catSweets') }
-            ].map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className="liquid-pill"
-                style={{
-                  padding: '8px 14px',
-                  border: selectedCategory === cat.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                  background: selectedCategory === cat.id ? 'var(--accent-gradient)' : 'var(--card-subtle)',
-                  color: selectedCategory === cat.id ? '#ffffff' : 'var(--text-main)',
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* دوگمەی تیری چەپ (لە RTL دەچێتە لای چەپی شاشە) */}
-          <button
-            onClick={() => scrollCategories('left')}
-            className="liquid-pill"
-            title={currentLangConfig.code === 'en' ? 'Scroll Left' : currentLangConfig.code === 'ar' ? 'تحريك لليسار' : currentLangConfig.code === 'fa' ? 'حرکت به چپ' : 'بردن بۆ چەپ'}
-            style={{
-              width: '32px',
-              height: '34px',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              flexShrink: 0,
-              color: 'var(--color-calories)',
-              border: '1px solid var(--accent-glow)',
-              background: 'var(--accent-glow)'
-            }}
-          >
-            <ChevronLeftIcon size={16} />
-          </button>
-        </div>
-
-        {/* دیاریکردنی ژەمی مەبەست بۆ خواردنەکە */}
+        {/* دیاریکردنی ژەمی مەبەست بۆ خواردنەکە (بە ڕەنگی مۆر) */}
         <div style={{ marginBottom: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
               {currentLangConfig.code === 'en' ? 'Add to Meal:' : currentLangConfig.code === 'ar' ? 'إضافة إلى وجبة:' : currentLangConfig.code === 'fa' ? 'افزودن به وعده:' : 'زیادکردن بۆ ژەمی:'}
             </span>
+            {selectedCategory !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                style={{ background: 'rgba(147, 51, 234, 0.2)', border: '1px solid rgba(192, 132, 252, 0.4)', color: '#E9D5FF', borderRadius: '8px', padding: '2px 8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                <span>{foodCategoriesList.find(c => c.id === selectedCategory)?.label}</span>
+                <X size={12} />
+              </button>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
             {[
@@ -4006,33 +4340,38 @@ export default function App() {
               { id: 'lunch', label: t('lunch') },
               { id: 'snack', label: t('snack') },
               { id: 'dinner', label: t('dinner') }
-            ].map(m => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setSelectedMealType(m.id)}
-                className="liquid-pill"
-                style={{
-                  padding: '9px 4px',
-                  borderRadius: '12px',
-                  fontSize: '11.5px',
-                  fontWeight: '800',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  border: selectedMealType === m.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                  background: selectedMealType === m.id ? 'var(--accent-gradient)' : 'var(--card-subtle)',
-                  color: selectedMealType === m.id ? '#ffffff' : 'var(--text-main)',
-                  boxShadow: selectedMealType === m.id ? '0 2px 10px var(--accent-glow)' : 'none',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {m.label}
-              </button>
-            ))}
+            ].map(m => {
+              const isSelectedMeal = selectedMealType === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelectedMealType(m.id)}
+                  className="liquid-pill"
+                  style={{
+                    padding: '9px 4px',
+                    borderRadius: '12px',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    border: isSelectedMeal ? '1.5px solid #C084FC' : '1px solid rgba(168, 85, 247, 0.45)',
+                    background: isSelectedMeal
+                      ? 'linear-gradient(135deg, #9333EA 0%, #6B21A8 100%)'
+                      : 'rgba(147, 51, 234, 0.16)',
+                    color: isSelectedMeal ? '#ffffff' : '#E9D5FF',
+                    boxShadow: isSelectedMeal ? '0 4px 14px rgba(147, 51, 234, 0.45)' : 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* لیستی خواردنەکان (کلیککردن پەنجەرەی ڕێژە و کێشان دەکاتەوە) */}
+        {/* لیستی خواردنەکان (بەبێ دووبارەبوونەوەی ناوی خواردن بە سەوزی لە ژێرەوە) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
           {displayedFoods.map(food => (
             <div 
@@ -4042,26 +4381,23 @@ export default function App() {
               style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: food.isAiGenerated ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '26px' }}>{food.icon}</span>
+                <span style={{ fontSize: '24px', display: 'flex', alignItems: 'center' }}>{food.icon}</span>
                 <div>
-                  <div style={{ fontWeight: '800', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
+                  <div style={{ fontWeight: '800', fontSize: '14.5px', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
                     <span>{getLocalizedFoodName(food, language)}</span>
                     {food.isAiGenerated && (
-                      <span style={{ fontSize: '10px', background: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%)', color: '#ffffff', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>{currentLangConfig.code === 'en' ? 'Smart' : currentLangConfig.code === 'ar' ? 'ذكي' : currentLangConfig.code === 'fa' ? 'هوشمند' : 'زیرەک'}</span>
+                      <span style={{ fontSize: '10px', background: 'linear-gradient(135deg, #9333EA 0%, #6B21A8 100%)', color: '#ffffff', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>{currentLangConfig.code === 'en' ? 'Smart' : currentLangConfig.code === 'ar' ? 'ذكي' : currentLangConfig.code === 'fa' ? 'هوشمند' : 'زیرەک'}</span>
                     )}
-                  </div>
-                  <div style={{ fontSize: '11.5px', color: 'var(--color-carbs)', fontWeight: '600', marginTop: '2px' }}>
-                    {language === 'ku' ? food.name : (food.englishName || food.name)}
                   </div>
                 </div>
               </div>
-              <div style={{ textAlign: isRtl ? 'left' : 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ textAlign: isRtl ? 'left' : 'right', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
                 <div>
                   <div style={{ fontWeight: '800', fontSize: '14px', color: 'var(--color-carbs)' }}>
-                    {food.baseCalories} <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('calPer100')}</span>
+                    {food.baseCalories} <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{food.isLiquid ? (currentLangConfig.code === 'en' ? 'kcal/100ml' : 'کال/١٠٠مل') : t('calPer100')}</span>
                   </div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    <Beef size={16} className="inline-block" /> {food.baseProtein}g • <Wheat size={16} className="inline-block" /> {food.baseCarbs}g
+                    <Beef size={14} className="inline-block" /> {food.baseProtein}g • <Wheat size={14} className="inline-block" /> {food.baseCarbs}g
                   </div>
                 </div>
 
@@ -4074,7 +4410,7 @@ export default function App() {
                     <TrashIcon size={16} color="#EF4444" />
                   </button>
                 ) : (
-                  <span className="liquid-pill" style={{ color: 'var(--accent-primary)', padding: '6px 10px', fontSize: '11px', fontWeight: '800' }}>
+                  <span className="liquid-pill" style={{ color: '#D8B4FE', border: '1px solid rgba(168, 85, 247, 0.4)', background: 'rgba(147, 51, 234, 0.15)', padding: '6px 10px', fontSize: '11px', fontWeight: '800' }}>
                     {currentLangConfig.code === 'en' ? '+ Portion' : currentLangConfig.code === 'ar' ? '+ تحديد الكمية' : currentLangConfig.code === 'fa' ? '+ مقدار' : '+ کێشان'}
                   </span>
                 )}
@@ -4425,6 +4761,157 @@ export default function App() {
                 </div>
               )}
 
+              {onboardingStep === 5 && (
+                <div className="fade-in">
+                  <div style={{ textAlign: 'center', marginBottom: '18px' }}>
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '18px',
+                      background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%)',
+                      border: '1.5px solid rgba(168, 85, 247, 0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 12px auto',
+                      color: '#C084FC',
+                      boxShadow: '0 6px 20px rgba(147, 51, 234, 0.25)'
+                    }}>
+                      <Pill size={28} />
+                    </div>
+                    <h3 style={{ fontSize: '19px', fontWeight: '900', marginBottom: '8px', color: 'var(--text-main)' }}>
+                      {currentLangConfig.code === 'en' ? 'Do you use supplements?' : currentLangConfig.code === 'ar' ? 'هل تستخدم المكملات الغذائية؟' : currentLangConfig.code === 'fa' ? 'آیا مکمل مصرف می‌کنید؟' : 'ئایا سەپلیمێنت بەکاردێنی؟'}
+                    </h3>
+                    <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.6', margin: 0 }}>
+                      {currentLangConfig.code === 'en'
+                        ? 'Select any protein, pre-workout, vitamin, medication, or hormone you use so the AI system adapts your nutrition, water, and workout plan.'
+                        : 'پڕۆتین، تاقە، ڤیتامین، دەرمان یان هۆرمۆن دیاری بکە تا بەرنامەکە خشتەی خۆراک و ئاو و کۆرسی ڕاهێنانەکەت ڕێکبخات.'}
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOnboardingData(prev => ({ ...prev, usesSupplements: true }));
+                        setSupplementsModalSource('onboarding');
+                        setShowSupplementsModal(true);
+                      }}
+                      className="liquid-pill"
+                      style={{
+                        padding: '16px 12px',
+                        borderRadius: '16px',
+                        fontSize: '15px',
+                        fontWeight: '900',
+                        cursor: 'pointer',
+                        border: onboardingData.usesSupplements === true ? '2px solid #C084FC' : '1px solid var(--border-color)',
+                        background: onboardingData.usesSupplements === true
+                          ? 'linear-gradient(135deg, #9333EA 0%, #4F46E5 100%)'
+                          : 'var(--card-subtle)',
+                        color: onboardingData.usesSupplements === true ? '#ffffff' : 'var(--text-main)',
+                        boxShadow: onboardingData.usesSupplements === true ? '0 6px 20px rgba(147, 51, 234, 0.4)' : 'none',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span>✅ {currentLangConfig.code === 'en' ? 'Yes' : currentLangConfig.code === 'ar' ? 'نعم' : currentLangConfig.code === 'fa' ? 'بله' : 'بەڵێ'}</span>
+                      <span style={{ fontSize: '11px', fontWeight: '700', opacity: 0.85 }}>
+                        {currentLangConfig.code === 'en' ? 'Select Supplements' : 'دیاریکردنی سەپلیمێنتەکان'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const finalWeight = Number(onboardingData.weight) || 75;
+                        const finalHeight = Number(onboardingData.height) || 175;
+                        const finalAge = Number(onboardingData.age) || 22;
+                        const finalTargetWeight = onboardingData.goal === 'جێگیرکردنی کێش'
+                          ? finalWeight
+                          : (Number(onboardingData.targetWeight) || (onboardingData.goal.includes('زیادکردن') ? finalWeight + 5 : Math.max(45, finalWeight - 5)));
+                        const base = {
+                          ...onboardingData,
+                          usesSupplements: false,
+                          supplements: [],
+                          weight: finalWeight,
+                          height: finalHeight,
+                          age: finalAge,
+                          targetWeight: finalTargetWeight,
+                          name: onboardingData.name || (currentLangConfig.code === 'en' ? 'Athlete' : 'یاریزان'),
+                          targetDays: 45,
+                          availableDaysPerWeek: 4,
+                          trainingLocation: 'gym',
+                          activityLevel: 'active'
+                        };
+                        const autoCalc = calculateScientificGoalByAi(base);
+                        const updated = { ...base, ...autoCalc, goalSugar: 35 };
+                        setProfile(updated);
+                        setWorkoutCourse(null);
+                        const emptyDiet = Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
+                        setDietMeals(emptyDiet);
+                        try {
+                          localStorage.setItem('app_profile', JSON.stringify(updated));
+                          localStorage.removeItem('app_workout_course');
+                          localStorage.setItem('app_diet_meals', JSON.stringify(emptyDiet));
+                        } catch (e) {}
+                        setHasCompletedOnboarding(true);
+                      }}
+                      className="liquid-pill"
+                      style={{
+                        padding: '16px 12px',
+                        borderRadius: '16px',
+                        fontSize: '15px',
+                        fontWeight: '900',
+                        cursor: 'pointer',
+                        border: onboardingData.usesSupplements === false ? '2px solid #38BDF8' : '1px solid var(--border-color)',
+                        background: onboardingData.usesSupplements === false
+                          ? 'rgba(56, 189, 248, 0.2)'
+                          : 'var(--card-subtle)',
+                        color: 'var(--text-main)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span>❌ {currentLangConfig.code === 'en' ? 'No' : currentLangConfig.code === 'ar' ? 'لا' : currentLangConfig.code === 'fa' ? 'خیر' : 'نەخێر'}</span>
+                      <span style={{ fontSize: '11px', fontWeight: '700', opacity: 0.75 }}>
+                        {currentLangConfig.code === 'en' ? 'Enter App Directly' : 'چوونە ناو بەرنامە'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {Array.isArray(onboardingData.supplements) && onboardingData.supplements.length > 0 && (
+                    <div style={{ padding: '12px', borderRadius: '14px', background: 'rgba(147, 51, 234, 0.12)', border: '1px solid rgba(168, 85, 247, 0.35)', marginBottom: '8px' }}>
+                      <div className="flex-between" style={{ marginBottom: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#E9D5FF' }}>
+                          {currentLangConfig.code === 'en' ? `Selected (${onboardingData.supplements.length}):` : `دیاریکراوەکان (${onboardingData.supplements.length}):`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSupplementsModalSource('onboarding');
+                            setShowSupplementsModal(true);
+                          }}
+                          style={{ background: 'none', border: 'none', color: '#C084FC', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer' }}
+                        >
+                          + {currentLangConfig.code === 'en' ? 'Edit / Add More' : 'دەستکاری / زیادکردن'}
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {onboardingData.supplements.map(s => (
+                          <span key={s} style={{ fontSize: '11.5px', fontWeight: '800', padding: '4px 10px', borderRadius: '10px', background: 'rgba(147, 51, 234, 0.3)', color: '#ffffff', border: '1px solid rgba(192, 132, 252, 0.4)' }}>
+                            💊 {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* دوگمەی نێکست و پێشوو - ڕاستەوخۆ لە ژێر فۆڕمەکە بەبێ بۆشایی زیادە */}
               <div style={{ marginTop: '22px', display: 'flex', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '18px' }}>
                 {onboardingStep > 1 && (
@@ -4438,7 +4925,7 @@ export default function App() {
                 <button 
                   type="button"
                   onClick={() => {
-                    if (onboardingStep < 4) {
+                    if (onboardingStep < 5) {
                       setOnboardingStep(prev => prev + 1);
                     } else {
                       const finalWeight = Number(onboardingData.weight) || 75;
@@ -4449,6 +4936,7 @@ export default function App() {
                         : (Number(onboardingData.targetWeight) || (onboardingData.goal.includes('زیادکردن') ? finalWeight + 5 : Math.max(45, finalWeight - 5)));
                       const base = {
                         ...onboardingData,
+                        supplements: Array.isArray(onboardingData.supplements) ? onboardingData.supplements : [],
                         weight: finalWeight,
                         height: finalHeight,
                         age: finalAge,
@@ -4475,7 +4963,7 @@ export default function App() {
                   }}
                   className="liquid-pill"
                   style={{ padding: '14px', background: 'var(--accent-gradient)', color: '#ffffff', fontWeight: '900', border: 'none', flex: 2, boxShadow: '0 4px 15px var(--accent-glow)', cursor: 'pointer', fontSize: '15px' }}
-                >{onboardingStep === 4 ? t('completeOnboarding') : t('nextStep')}</button>
+                >{onboardingStep === 5 ? t('completeOnboarding') : t('nextStep')}</button>
               </div>
             </div>
           </div>
@@ -4692,9 +5180,9 @@ export default function App() {
                 : '1px solid var(--color-carbs)';
 
               return (
-                <div className="dark-card" style={{ gridColumn: 'span 2', padding: '14px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ gridColumn: 'span 2', padding: '6px 2px 10px 2px', textAlign: 'center', position: 'relative' }}>
                   
-                  {/* سەردێڕی کارتەکە */}
+                  {/* سەردێڕی بەشی کالۆری بەبێ چوارچێوەی گەورە */}
                   <div className="flex-between" style={{ marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ color: 'var(--color-calories)', display: 'flex' }}>
@@ -5406,9 +5894,10 @@ export default function App() {
                     <button
                       onClick={() => { playUncheckSound(); setRestTimerRunning(false); setRestTimerSeconds(0); setActiveTimerSet(null); }}
                       className="liquid-pill"
-                      style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer', color: '#ef4444' }}
+                      style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.45)', background: 'rgba(239, 68, 68, 0.12)' }}
+                      title={currentLangConfig.code === 'en' ? 'Reset Timer' : 'ڕاگرتن و لابردنی کاتژمێر'}
                     >
-                      <RotateCcw size={14} />
+                      <X size={16} strokeWidth={2.5} color="#ef4444" />
                     </button>
                   </div>
                 </div>
@@ -5432,44 +5921,46 @@ export default function App() {
             </div>
           )}
 
-          {/* ڕۆژەکانی هەفتە */}
+          {/* ڕۆژەکانی هەفتە (٧ ڕۆژی تەواو بە ناوی پاک و کوردی بەپێی داخوازی) */}
           <div style={{ marginBottom: '20px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
-              {(workoutCourse?.weeklyPlan || []).map((day, idx) => {
-                const isSelected = selectedDayIdx === idx;
-                const isCompleted = completedDayIndices.includes(idx);
-                return (
-                  <div 
-                    key={day.dayKey}
-                    onClick={() => setSelectedDayIdx(idx)}
-                    className="liquid-pill"
-                    style={{
-                      padding: '12px 3px',
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      background: isCompleted 
-                        ? 'var(--accent-glow)' 
-                        : (isSelected ? 'var(--accent-gradient)' : 'var(--card-subtle)'),
-                      color: isSelected ? '#ffffff' : 'var(--text-main)',
-                      border: isCompleted 
-                        ? '1.5px solid var(--accent-glow)' 
-                        : (isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)'),
-                      boxShadow: isCompleted 
-                        ? '0 4px 16px var(--accent-glow)' 
-                        : (isSelected ? '0 8px 20px var(--accent-glow)' : 'none'),
-                      transition: 'all 0.25s ease'
-                    }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', color: isCompleted ? '#C084FC' : 'inherit' }}>
-                      {DAY_SHORT_NAMES[language]?.[idx] || day.dayName.slice(0, 3)}
+              {(() => {
+                const cleanKurdishDays = ['شەممە', '1 شەم', '2 شەم', '3 شەم', '4شەم', '5 شەم', 'هەینی'];
+                return (workoutCourse?.weeklyPlan || []).map((day, idx) => {
+                  const isSelected = selectedDayIdx === idx;
+                  const isCompleted = completedDayIndices.includes(idx);
+                  const displayDayTitle = cleanKurdishDays[idx] || day.dayName;
+
+                  return (
+                    <div 
+                      key={day.dayKey || idx}
+                      onClick={() => setSelectedDayIdx(idx)}
+                      className="liquid-pill"
+                      style={{
+                        padding: '12px 2px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        background: isCompleted 
+                          ? 'var(--accent-glow)' 
+                          : (isSelected ? 'var(--accent-gradient)' : 'var(--card-subtle)'),
+                        color: isSelected ? '#ffffff' : 'var(--text-main)',
+                        border: isCompleted 
+                          ? '1.5px solid var(--accent-glow)' 
+                          : (isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)'),
+                        boxShadow: isCompleted 
+                          ? '0 4px 16px var(--accent-glow)' 
+                          : (isSelected ? '0 8px 20px var(--accent-glow)' : 'none'),
+                        transition: 'all 0.25s ease'
+                      }}
+                    >
+                      <div style={{ fontSize: '11.5px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', whiteSpace: 'nowrap' }}>
+                        <span>{displayDayTitle}</span>
+                        {isCompleted && <span style={{ color: '#22c55e', fontWeight: '900', display: 'inline-flex' }}><Check size={13} style={{ strokeWidth: 3 }} /></span>}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                      <span>{day.isRestDay ? (language === 'en' ? 'OFF' : language === 'ar' ? 'راحة' : language === 'fa' ? 'استراحت' : 'پشوو') : (language === 'en' ? `D${idx+1}` : language === 'ar' ? `ي${idx+1}` : language === 'fa' ? `ر${idx+1}` : `ڕۆژی ${idx+1}`)}</span>
-                      {isCompleted && <span style={{ fontSize: '11px', color: 'var(--color-calories)', fontWeight: '900' }}><Check size={16} className="inline-block" /></span>}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
 
@@ -5861,14 +6352,14 @@ export default function App() {
                                       </div>
 
                                       <button
+                                        type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          const query = encodeURIComponent(getExerciseEnglishName(ex));
-                                          window.open(`https://www.google.com/search?q=${query}+workout`, '_blank');
+                                          setExerciseToSwapConfirm({ ex, exIdx });
                                         }}
                                         className="liquid-pill no-print"
-                                        title={currentLangConfig.code === 'en' ? 'Search on Google' : currentLangConfig.code === 'ar' ? 'البحث في جوجل' : currentLangConfig.code === 'fa' ? 'جستجو در گوگل' : 'سێرچ لە گووگڵ'}
-                                        aria-label="Search"
+                                        title={language === 'en' ? 'Swap / Replace Exercise' : 'گۆڕینی ڕاهێنان بە جێگرەوە'}
+                                        aria-label="Swap Exercise"
                                         style={{
                                           width: '32px',
                                           height: '32px',
@@ -5877,14 +6368,14 @@ export default function App() {
                                           alignItems: 'center',
                                           justifyContent: 'center',
                                           borderRadius: '10px',
-                                          border: '1px solid var(--border-color)',
-                                          background: 'var(--card-subtle)',
-                                          color: 'var(--text-muted)',
+                                          border: '1px solid rgba(239, 68, 68, 0.45)',
+                                          background: 'rgba(239, 68, 68, 0.12)',
+                                          color: '#ef4444',
                                           cursor: 'pointer',
                                           flexShrink: 0
                                         }}
                                       >
-                                        <SearchIcon size={14} />
+                                        <RefreshCw size={14} color="#ef4444" />
                                       </button>
                                     </div>
                                   </div>
@@ -6030,6 +6521,32 @@ export default function App() {
                                       <Info size={12} style={{ color: '#38bdf8' }} />
                                       <span>{language === 'en' ? 'Form Guide' : 'ڕێبەری شێواز'}</span>
                                     </div>
+
+                                    {/* شلەی پڕبوونی کاونتداونی پشوو لە ژێر وێنەکە لە چەپەوە بۆ ڕاست بەپێی کات */}
+                                    {isExerciseTimerActive && (
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          bottom: 0,
+                                          left: 0,
+                                          right: 0,
+                                          height: '8px',
+                                          background: 'rgba(0, 0, 0, 0.45)',
+                                          overflow: 'hidden',
+                                          zIndex: 10
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            height: '100%',
+                                            width: `${Math.min(100, Math.max(0, ((restTimerTotal - restTimerSeconds) / (restTimerTotal || 60)) * 100))}%`,
+                                            background: 'linear-gradient(90deg, #10b981 0%, #06b6d4 50%, #a855f7 100%)',
+                                            boxShadow: '0 0 14px rgba(6, 182, 212, 0.9)',
+                                            transition: 'width 1s linear'
+                                          }}
+                                        />
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* ناوەڕۆک و دوگمەکانی خوارەوەی کاردی گەورە */}
@@ -6184,11 +6701,11 @@ export default function App() {
                                         type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          const query = encodeURIComponent(getExerciseEnglishName(ex));
-                                          window.open(`https://www.google.com/search?q=${query}+workout`, '_blank');
+                                          setExerciseToSwapConfirm({ ex, exIdx });
                                         }}
                                         className="liquid-pill no-print"
-                                        title={currentLangConfig.code === 'en' ? 'Search on Google' : 'سێرچ لە گووگڵ'}
+                                        title={language === 'en' ? 'Swap / Replace Exercise' : 'گۆڕینی ڕاهێنان بە جێگرەوە'}
+                                        aria-label="Swap Exercise"
                                         style={{
                                           width: '36px',
                                           height: '36px',
@@ -6196,14 +6713,14 @@ export default function App() {
                                           alignItems: 'center',
                                           justifyContent: 'center',
                                           borderRadius: '10px',
-                                          border: '1px solid var(--border-color)',
-                                          background: 'var(--card-subtle)',
-                                          color: 'var(--text-muted)',
+                                          border: '1px solid rgba(239, 68, 68, 0.45)',
+                                          background: 'rgba(239, 68, 68, 0.12)',
+                                          color: '#ef4444',
                                           cursor: 'pointer',
                                           flexShrink: 0
                                         }}
                                       >
-                                        <SearchIcon size={14} />
+                                        <RefreshCw size={15} color="#ef4444" />
                                       </button>
                                     </div>
 
@@ -6471,7 +6988,7 @@ export default function App() {
             left: 0, 
             right: 0, 
             bottom: 0, 
-            zIndex: 99999, 
+            zIndex: 100000, 
             display: 'flex', 
             justifyContent: 'center', 
             alignItems: 'flex-end', 
@@ -6530,14 +7047,17 @@ export default function App() {
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {(selectedFoodForPortion.units || [{ name: 'g', ratio: 1 }]).map(u => {
                         const isUnitSelected = portionUnitObj.name === u.name;
-                        const isUgram = u.ratio === 1 || u.name === 'گرام' || u.name === 'g';
+                        const isUgram = u.ratio === 1 || u.name === 'گرام' || u.name === 'مل' || u.name === 'g' || u.name === 'ml';
                         return (
                           <button
                             key={u.name}
                             onClick={() => {
                               setPortionUnitObj(u);
-                              if (isUgram && portionQty <= 10) setPortionQty(100);
-                              else if (!isUgram && portionQty >= 50) setPortionQty(1);
+                              if (isUgram) {
+                                setPortionQty(selectedFoodForPortion.standardWeight || 150);
+                              } else {
+                                setPortionQty(1);
+                              }
                             }}
                             className="liquid-pill"
                             style={{
@@ -6585,23 +7105,9 @@ export default function App() {
                         +
                       </button>
                     </div>
-
-                    {/* پێشنیارە خێراکانی ڕێژە */}
-                    <div style={{ display: 'flex', gap: '6px', marginTop: '10px', justifyContent: 'center' }}>
-                      {(isGramUnit ? [50, 100, 150, 200, 250] : [1, 2, 3, 4, 5]).map(val => (
-                        <button
-                          key={val}
-                          onClick={() => setPortionQty(val)}
-                          className="liquid-pill"
-                          style={{ padding: '5px 12px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
-                        >
-                          {val} {getLocalizedUnitName(portionUnitObj.name)}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
-                  {/* ژەمی مەبەست */}
+                  {/* ژەمی مەبەست (دوگمەی مۆر بەپێی داخوازی) */}
                   <div style={{ marginBottom: '18px' }}>
                     <div style={{ fontSize: '12.5px', fontWeight: '800', marginBottom: '8px', color: 'var(--text-muted)' }}>
                       {currentLangConfig.code === 'en' ? 'Target Meal:' : currentLangConfig.code === 'ar' ? 'الوجبة المستهدفة:' : currentLangConfig.code === 'fa' ? 'وعده هدف:' : 'ژەمی مەبەست:'}
@@ -6618,14 +7124,15 @@ export default function App() {
                           onClick={() => setPortionMealTarget(m.id)}
                           className="liquid-pill"
                           style={{
-                            padding: '8px 4px',
-                            fontSize: '11px',
+                            padding: '10px 4px',
+                            fontSize: '11.5px',
                             fontWeight: '800',
                             textAlign: 'center',
                             cursor: 'pointer',
-                            border: portionMealTarget === m.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                            background: portionMealTarget === m.id ? 'rgba(6, 182, 212, 0.2)' : 'var(--card-subtle)',
-                            color: portionMealTarget === m.id ? 'var(--accent-primary)' : 'var(--text-main)'
+                            border: portionMealTarget === m.id ? '1.5px solid #a855f7' : '1px solid var(--border-color)',
+                            background: portionMealTarget === m.id ? 'linear-gradient(135deg, #9333EA 0%, #6B21A8 100%)' : 'var(--card-subtle)',
+                            color: portionMealTarget === m.id ? '#ffffff' : 'var(--text-main)',
+                            boxShadow: portionMealTarget === m.id ? '0 0 12px rgba(168, 85, 247, 0.45)' : 'none'
                           }}
                         >
                           {m.label}
@@ -6633,32 +7140,6 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-
-                  {/* پێشبینینی ڕاستەوخۆی کالۆری و ماکرۆکان بەپێی بڕ (Live Macro Preview) */}
-                  {(() => {
-                    const unitRatio = portionUnitObj.ratio || 1;
-                    const mult = (portionQty * unitRatio) / 100;
-                    const calcCal = Math.round(selectedFoodForPortion.baseCalories * mult);
-                    const calcP = Math.round(selectedFoodForPortion.baseProtein * mult);
-                    const calcC = Math.round(selectedFoodForPortion.baseCarbs * mult);
-                    const calcF = Math.round(selectedFoodForPortion.baseFat * mult);
-
-                    return (
-                      <div className="dark-card" style={{ padding: '14px 16px', marginBottom: '20px', background: 'var(--accent-glow)', border: '1px solid var(--accent-glow)' }}>
-                        <div className="flex-between" style={{ marginBottom: '8px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
-                            {currentLangConfig.code === 'en' ? 'Total calories for this portion:' : currentLangConfig.code === 'ar' ? 'إجمالي السعرات لهذه الكمية:' : currentLangConfig.code === 'fa' ? 'کل کالری این مقدار:' : 'کۆی کالۆری ئەم بڕە:'}
-                          </span>
-                          <span style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)' }}>{calcCal} {t('kcal')}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-main)', borderTop: '1px solid var(--border-color)', paddingTop: '6px' }}>
-                          <span><Beef size={16} className="inline-block" /> {t('protein')}: <b style={{ color: 'var(--color-proteins)' }}>{calcP}g</b></span>
-                          <span><Wheat size={16} className="inline-block" /> {t('carbs')}: <b style={{ color: 'var(--color-carbs)' }}>{calcC}g</b></span>
-                          <span><Cookie size={16} className="inline-block" /> {t('fat')}: <b style={{ color: 'var(--color-calories)' }}>{calcF}g</b></span>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </>
               );
             })()}
@@ -6799,7 +7280,10 @@ export default function App() {
             background: 'var(--accent-gradient-subtle)',
             border: '1px solid var(--accent-glow)',
             boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
-            backdropFilter: 'blur(20px)'
+            backdropFilter: 'blur(20px)',
+            position: 'sticky',
+            top: 0,
+            zIndex: 30
           }}>
             <div className="flex-between" style={{ alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -7286,6 +7770,8 @@ export default function App() {
                 dir={isRtl ? 'rtl' : 'ltr'}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
+                onFocus={() => setIsChatInputFocused(true)}
+                onBlur={() => setIsChatInputFocused(false)}
                 placeholder={t('askAiPlaceholder')}
                 style={{
                   flex: 1,
@@ -7673,6 +8159,53 @@ export default function App() {
                 + {t('add')}
               </button>
             </div>
+          </div>
+
+          {/* کارتی سەپلیمێنت و تەواوکەرە خۆراکییەکان (Supplements & Nutritionals Card) */}
+          <div className="dark-card" style={{ padding: '20px', marginBottom: '20px' }}>
+            <div className="flex-between" style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Zap size={20} color="var(--accent-primary)" />
+                <h3 style={{ fontSize: '16px', fontWeight: '800' }}>
+                  {language === 'en' ? 'Supplements & Vitamins' : 'سەپلیمێنت و تەواوکەرە خۆراکییەکان'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSupplementsModal(true)}
+                className="liquid-pill"
+                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-primary)' }}
+              >
+                <EditIcon size={13} />
+                <span>{language === 'en' ? 'Edit' : 'دەستکاری'}</span>
+              </button>
+            </div>
+
+            {profile.supplements && profile.supplements.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {profile.supplements.map((sup, sIdx) => {
+                  const sName = typeof sup === 'string' ? sup : (sup.name || sup.englishName);
+                  return (
+                    <div key={sIdx} className="liquid-pill" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.35)', color: 'var(--text-main)', padding: '6px 12px', fontSize: '12.5px', fontWeight: '700' }}>
+                      <Sparkles size={13} color="#a855f7" />
+                      <span>{sName}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{language === 'en' ? 'No supplements selected.' : 'هیچ سەپلیمێنتێک دیاری نەکراوە.'}</span>
+                <button
+                  type="button"
+                  onClick={() => setShowSupplementsModal(true)}
+                  className="liquid-pill"
+                  style={{ padding: '6px 12px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer' }}
+                >
+                  + {language === 'en' ? 'Add' : 'زیادکردن'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ==================== دوگمەی سوور بۆ ڕێستکردنەوەی تەواوی بەرنامەکە ==================== */}
@@ -9881,19 +10414,41 @@ export default function App() {
                   <h3 style={{ fontSize: '17px', fontWeight: '800', margin: 0, color: 'var(--text-main)' }}>
                     {homeMealsModalTab === 'meals' ? t('todaysMeals') : t('foodBank')}
                   </h3>
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: '600' }}>
-                    {homeMealsModalTab === 'meals' ? t('manageMealsSub') : t('searchFoodSub')}
-                  </div>
                 </div>
               </div>
 
-              <button 
-                onClick={() => setShowHomeMealsModal(false)} 
-                className="liquid-pill"
-                style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '1px solid var(--border-color)', color: 'var(--text-main)', background: 'var(--card-subtle)' }}
-              >
-                <X size={17} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  type="button"
+                  onClick={() => setShowFoodCategoryFilter(prev => !prev)} 
+                  className="liquid-pill"
+                  title={currentLangConfig.code === 'en' ? 'Filter Categories' : 'فلتەری جۆرەکان'}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    padding: 0,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    border: showFoodCategoryFilter ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    color: showFoodCategoryFilter ? 'var(--accent-primary)' : 'var(--text-main)',
+                    background: showFoodCategoryFilter ? 'var(--accent-glow)' : 'var(--card-subtle)'
+                  }}
+                >
+                  <SlidersHorizontal size={17} />
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => setShowHomeMealsModal(false)} 
+                  className="liquid-pill"
+                  style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '1px solid var(--border-color)', color: 'var(--text-main)', background: 'var(--card-subtle)' }}
+                >
+                  <X size={17} />
+                </button>
+              </div>
             </div>
 
             {/* گۆڕینی نێوان ژەمەکان و بانکی خۆراک */}
@@ -10017,21 +10572,25 @@ export default function App() {
                 const prot = parseNum(scannedFood.baseProtein ?? scannedFood.proteinNum ?? scannedFood.protein, 10);
                 const carbs = parseNum(scannedFood.baseCarbs ?? scannedFood.carbsNum ?? scannedFood.carbs, 20);
                 const fat = parseNum(scannedFood.baseFat ?? scannedFood.fatNum ?? scannedFood.fat, 5);
+                const estWeight = parseNum(scannedFood.weight ?? scannedFood.estimatedWeight ?? scannedFood.portionWeight, 150);
+                const estUnit = scannedFood.unit || (scannedFood.isLiquid ? 'مل' : 'گرام');
 
                 const newFoodItem = {
                   id: 'scan_' + Date.now(),
                   name: scannedFood.name || 'خواردنی سکانکراو',
                   englishName: scannedFood.englishName || scannedFood.name || 'Scanned Food',
                   icon: scannedFood.icon || '🍽️',
-                  baseCalories: cal,
-                  baseProtein: prot,
-                  baseCarbs: carbs,
-                  baseFat: fat,
+                  baseCalories: Math.round((cal / (estWeight || 100)) * 100),
+                  baseProtein: Math.round((prot / (estWeight || 100)) * 100),
+                  baseCarbs: Math.round((carbs / (estWeight || 100)) * 100),
+                  baseFat: Math.round((fat / (estWeight || 100)) * 100),
+                  standardWeight: estWeight,
+                  isLiquid: scannedFood.isLiquid || false,
                   category: 'all',
-                  units: [{ name: 'گرام', ratio: 1 }, { name: 'قاپ', ratio: 200 }, { name: 'دانە', ratio: 100 }],
                   isAiGenerated: true
                 };
-                openPortionSelector(newFoodItem);
+                setShowScanModal(false);
+                openPortionSelector(newFoodItem, estUnit, estWeight);
               }}
             />
           </div>
@@ -10610,6 +11169,598 @@ export default function App() {
         </div>
       )}
 
+      {/* ==================== شاشەی سەوزی دەستپێکە بۆ ٣ چرکە لە دوای کاونتداون (3s Full-Screen Start Set Overlay) ==================== */}
+      {showStartSetOverlay && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999999,
+            backgroundColor: '#16a34a',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            animation: 'fadeIn 0.2s ease-in-out',
+            direction: currentLangConfig.dir,
+            cursor: 'pointer'
+          }}
+          onClick={() => setShowStartSetOverlay(false)}
+        >
+          <div style={{
+            width: '90px',
+            height: '90px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255, 255, 255, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+            boxShadow: '0 0 35px rgba(255,255,255,0.4)'
+          }}>
+            <Play size={48} color="#ffffff" />
+          </div>
+          <h1 style={{
+            fontSize: '44px',
+            fontWeight: '900',
+            color: '#ffffff',
+            margin: '0 0 10px 0',
+            textAlign: 'center',
+            textShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            letterSpacing: '1px'
+          }}>
+            دەستپێکە
+          </h1>
+          <p style={{
+            fontSize: '18px',
+            fontWeight: '800',
+            color: 'rgba(255, 255, 255, 0.95)',
+            margin: 0,
+            textAlign: 'center'
+          }}>
+            کاتی پشوو تەواوبوو، سێتی دواتر دەستیپێکرد!
+          </p>
+        </div>
+      )}
+
+      {/* ==================== دیالۆگی دڵنیاکەرەوەی گۆڕینی ڕاهێنان (Exercise Swap Confirmation) ==================== */}
+      {exerciseToSwapConfirm && (
+        <div 
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            direction: currentLangConfig.dir
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setExerciseToSwapConfirm(null); }}
+        >
+          <div 
+            className="modal-content"
+            style={{
+              background: 'linear-gradient(145deg, #181c30 0%, #101222 100%)',
+              border: '1.5px solid rgba(239, 68, 68, 0.45)',
+              borderRadius: '24px',
+              padding: '24px 20px',
+              maxWidth: '380px',
+              width: '100%',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.7), 0 0 30px rgba(239, 68, 68, 0.25)',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '18px',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1.5px solid rgba(239, 68, 68, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ef4444',
+              margin: '0 auto 14px auto'
+            }}>
+              <RefreshCw size={26} />
+            </div>
+
+            <h3 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
+              {language === 'en' ? 'Swap Exercise' : 'گۆڕینی ڕاهێنان'}
+            </h3>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.6', margin: '0 0 18px 0' }}>
+              {language === 'en'
+                ? `Do you want to change "${exerciseToSwapConfirm.ex?.englishName || exerciseToSwapConfirm.ex?.name}"? You can let AI pick an alternative, choose from the catalog, or remove it.`
+                : `دەتەوێت ڕاهێنانی "${getLocalizedExerciseName(exerciseToSwapConfirm.ex, language)}" بگۆڕیت؟ دەتوانیت لە ڕێگەی زیرەکی دەستکرد یان لە لیستی جێگرەوەکان یەکێکی تر هەڵبژێریت.`}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* گۆڕین لە ڕێگەی زیرەکی دەستکرد */}
+              <button
+                type="button"
+                onClick={() => handleAiSwapSingleExercise(exerciseToSwapConfirm.ex, exerciseToSwapConfirm.exIdx)}
+                disabled={isAiSwappingExercise}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '14px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '13.5px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px var(--accent-glow)'
+                }}
+              >
+                <Sparkles size={16} />
+                <span>{isAiSwappingExercise ? (language === 'en' ? 'Finding with AI...' : 'خەریکی دۆزینەوەیە بە AI...') : (language === 'en' ? 'Auto-Swap with AI' : 'گۆڕین لە ڕێگەی زیرەکی دەستکرد (AI)')}</span>
+              </button>
+
+              {/* هەڵبژاردنی جێگرەوە لە لیست */}
+              <button
+                type="button"
+                onClick={() => {
+                  setExerciseSwapModalData(exerciseToSwapConfirm);
+                  setExerciseToSwapConfirm(null);
+                }}
+                className="liquid-pill"
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '14px',
+                  background: 'var(--card-subtle)',
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Dumbbell size={15} />
+                <span>{language === 'en' ? 'Choose from Alternative List' : 'هەڵبژاردنی جێگرەوە لە لیست'}</span>
+              </button>
+
+              {/* سڕینەوەی ئەم ڕاهێنانە */}
+              <button
+                type="button"
+                onClick={() => handleDeleteExerciseFromDay(exerciseToSwapConfirm.exIdx)}
+                className="liquid-pill"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '14px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#ef4444',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  fontSize: '12.5px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={14} />
+                <span>{language === 'en' ? 'Remove Exercise Completely' : 'لابردنی یەکجارەکی ئەم ڕاهێنانە'}</span>
+              </button>
+
+              {/* پەشیمانبوونەوە */}
+              <button
+                type="button"
+                onClick={() => setExerciseToSwapConfirm(null)}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '14px',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer'
+                }}
+              >
+                {language === 'en' ? 'Cancel' : 'پەشیمانبوونەوە'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== مۆداڵی تەواوی ڕاهێنانە جێگرەوەکان بە فلتەری ماسولکە و نەبوونی دووبارە (Exercise Alternatives Modal) ==================== */}
+      {exerciseSwapModalData && (
+        <div 
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            padding: 0,
+            direction: currentLangConfig.dir
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setExerciseSwapModalData(null); }}
+        >
+          <div 
+            className="modal-content bottom-sheet-content"
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: '28px 28px 0 0',
+              padding: '20px 18px 26px 18px',
+              borderTop: '1px solid var(--border-color)',
+              boxShadow: '0 -15px 45px rgba(0,0,0,0.65)'
+            }}
+          >
+            {/* دەسکی کێشان */}
+            <div style={{ width: '44px', height: '4px', background: 'rgba(255,255,255,0.3)', borderRadius: '2px', margin: '0 auto 14px auto', flexShrink: 0 }}></div>
+
+            <div className="flex-between" style={{ marginBottom: '14px', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '17px', fontWeight: '900', margin: 0, color: 'var(--text-main)' }}>
+                  {language === 'en' ? 'Select Alternative Exercise' : 'هەڵبژاردنی ڕاهێنانی جێگرەوە'}
+                </h3>
+                <div style={{ fontSize: '11.5px', color: 'var(--color-carbs)', fontWeight: '700', marginTop: '2px' }}>
+                  {language === 'en' ? 'Target: ' : 'مەبەست: '}{getLocalizedMuscle(exerciseSwapModalData.ex?.muscle, language)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExerciseSwapModalData(null)}
+                className="liquid-pill"
+                style={{ width: '34px', height: '34px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '1px solid var(--border-color)', color: 'var(--text-main)', background: 'var(--card-subtle)' }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            {/* گۆڕینی ڕاستەوخۆ لە ڕێگەی AI */}
+            <div style={{ marginBottom: '12px' }}>
+              <button
+                type="button"
+                onClick={() => handleAiSwapSingleExercise(exerciseSwapModalData.ex, exerciseSwapModalData.exIdx)}
+                disabled={isAiSwappingExercise}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '14px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px var(--accent-glow)'
+                }}
+              >
+                <Sparkles size={16} />
+                <span>{isAiSwappingExercise ? (language === 'en' ? 'Analyzing with AI...' : 'خەریکی دۆزینەوەیە بە AI...') : (language === 'en' ? 'Auto-Swap with AI' : 'گۆڕین لە ڕێگەی زیرەکی دەستکرد (AI)')}</span>
+              </button>
+            </div>
+
+            {/* فلتەری ماسولکە */}
+            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '10px' }}>
+              {[
+                { id: 'same', label: language === 'en' ? 'Same Muscle' : 'هەمان ماسولکە' },
+                { id: 'all', label: language === 'en' ? 'All Muscles' : 'هەموو جۆرەکان' },
+                { id: 'chest', label: 'سنگ' },
+                { id: 'back', label: 'پشت' },
+                { id: 'shoulders', label: 'شان' },
+                { id: 'arms', label: 'قۆڵ' },
+                { id: 'legs', label: 'قاچ' },
+                { id: 'core', label: 'کۆڕ و ورگ' }
+              ].map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setSwapMuscleFilter(f.id)}
+                  className="liquid-pill"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '11.5px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    border: swapMuscleFilter === f.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: swapMuscleFilter === f.id ? 'var(--accent-glow)' : 'var(--card-subtle)',
+                    color: swapMuscleFilter === f.id ? 'var(--accent-primary)' : 'var(--text-main)'
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* لیستی ڕاهێنانە جێگرەوەکان بەبێ هەبوونی دووبارە لە هەمان ڕۆژ */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+              {(() => {
+                const dayExercises = (workoutCourse?.weeklyPlan || [])[selectedDayIdx]?.exercises || [];
+                const existingNames = new Set(dayExercises.map(e => (e.englishName || e.name || '').toLowerCase().trim()));
+                const targetMuscle = (exerciseSwapModalData.ex?.muscle || '').toLowerCase();
+
+                const filteredCatalog = (ALTERNATIVE_EXERCISES_CATALOG || []).filter(item => {
+                  const itemKey = (item.englishName || item.name || '').toLowerCase().trim();
+                  // 1. مەرجی یەکەم: نابێت لە هەمان ئەو ڕۆژە هەبێت (No duplicates on the same day)
+                  if (existingNames.has(itemKey)) return false;
+
+                  // 2. مەرجی ماسولکە بەپێی فلتەر
+                  if (swapMuscleFilter === 'same') {
+                    return item.muscle.toLowerCase().includes(targetMuscle) || targetMuscle.includes(item.muscle.toLowerCase());
+                  }
+                  if (swapMuscleFilter === 'all') return true;
+                  if (swapMuscleFilter === 'chest') return item.muscle.includes('سنگ') || item.muscle.toLowerCase().includes('chest');
+                  if (swapMuscleFilter === 'back') return item.muscle.includes('پشت') || item.muscle.toLowerCase().includes('back') || item.muscle.toLowerCase().includes('lats');
+                  if (swapMuscleFilter === 'shoulders') return item.muscle.includes('شان') || item.muscle.toLowerCase().includes('shoulder');
+                  if (swapMuscleFilter === 'arms') return item.muscle.includes('قۆڵ') || item.muscle.includes('بایسێپس') || item.muscle.includes('تڕایسێپس');
+                  if (swapMuscleFilter === 'legs') return item.muscle.includes('قاچ') || item.muscle.toLowerCase().includes('leg') || item.muscle.toLowerCase().includes('quad');
+                  if (swapMuscleFilter === 'core') return item.muscle.includes('کۆڕ') || item.muscle.includes('ورگ') || item.muscle.toLowerCase().includes('abs');
+                  return true;
+                });
+
+                if (filteredCatalog.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      {language === 'en' ? 'No alternative exercises found in this category.' : 'هیچ ڕاهێنانێکی تر لەم بەشە نەدۆزرایەوە کە لە هەمان ڕۆژ نەبێت.'}
+                    </div>
+                  );
+                }
+
+                return filteredCatalog.map((candidate, cIdx) => (
+                  <div
+                    key={cIdx}
+                    onClick={() => handleReplaceExerciseInDay(exerciseSwapModalData.exIdx, candidate)}
+                    className="liquid-pill"
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '16px',
+                      background: 'var(--card-subtle)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      direction: 'ltr'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <ExerciseThumbnail exerciseName={candidate.englishName || candidate.name} size={42} />
+                      <div style={{ textAlign: 'left' }}>
+                        <div style={{ fontWeight: '800', fontSize: '14.5px', color: 'var(--text-main)' }}>
+                          {candidate.englishName || candidate.name}
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--color-carbs)', fontWeight: '600', marginTop: '2px' }}>
+                          {candidate.muscle} • {candidate.sets || 4}x{candidate.reps || '10-12'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '10px',
+                        background: 'var(--accent-gradient)',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontSize: '11.5px',
+                        fontWeight: '800',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {language === 'en' ? 'Select' : 'هەڵبژاردن'}
+                    </button>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== مۆداڵی تەواوی سەپلیمێنت و ڤیتامین و دەرمانەکان (Supplements Selector Modal) ==================== */}
+      {showSupplementsModal && (
+        <div 
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            padding: 0,
+            direction: currentLangConfig.dir
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSupplementsModal(false); }}
+        >
+          <div 
+            className="modal-content bottom-sheet-content"
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: '28px 28px 0 0',
+              padding: '20px 18px 26px 18px',
+              borderTop: '1px solid var(--border-color)',
+              boxShadow: '0 -15px 45px rgba(0,0,0,0.65)'
+            }}
+          >
+            {/* دەسکی کێشان */}
+            <div style={{ width: '44px', height: '4px', background: 'rgba(255,255,255,0.3)', borderRadius: '2px', margin: '0 auto 14px auto', flexShrink: 0 }}></div>
+
+            <div className="flex-between" style={{ marginBottom: '14px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Zap size={22} color="var(--accent-primary)" />
+                <h3 style={{ fontSize: '17px', fontWeight: '900', margin: 0, color: 'var(--text-main)' }}>
+                  {language === 'en' ? 'Supplements, Vitamins & Hormones' : 'سەپلیمێنت، ڤیتامین، دەرمان و هۆرمۆن'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSupplementsModal(false)}
+                className="liquid-pill"
+                style={{ width: '34px', height: '34px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '1px solid var(--border-color)', color: 'var(--text-main)', background: 'var(--card-subtle)' }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            {/* گەڕان لەناو سەپلیمێنتەکان */}
+            <div style={{ marginBottom: '12px' }}>
+              <input
+                type="text"
+                placeholder={language === 'en' ? 'Search supplements...' : 'گەڕان لەناو سەپلیمێنت و ڤیتامینەکان...'}
+                value={supplementSearchText}
+                onChange={(e) => setSupplementSearchText(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 16px',
+                  borderRadius: '14px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--card-subtle)',
+                  color: 'var(--text-main)',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* لیستی پۆلێنکراوی تەواوکەرە خۆراکییەکان */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', paddingRight: '4px' }}>
+              {(() => {
+                const searchLower = (supplementSearchText || '').toLowerCase().trim();
+                const currentSups = Array.isArray(profile.supplements) ? profile.supplements : [];
+
+                return (MASTER_SUPPLEMENTS_CATALOG || []).map((cat, catIdx) => {
+                  const filteredItems = (cat.items || []).filter(item => {
+                    if (!searchLower) return true;
+                    return item.name.toLowerCase().includes(searchLower) || (item.englishName && item.englishName.toLowerCase().includes(searchLower));
+                  });
+
+                  if (filteredItems.length === 0) return null;
+
+                  return (
+                    <div key={catIdx}>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--accent-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>⚡</span>
+                        <span>{cat.category}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
+                        {filteredItems.map((item, iIdx) => {
+                          const isSelected = currentSups.some(s => (typeof s === 'string' ? s : (s.name || s.englishName)) === item.name);
+
+                          return (
+                            <div
+                              key={iIdx}
+                              onClick={() => {
+                                const exists = currentSups.some(s => (typeof s === 'string' ? s : (s.name || s.englishName)) === item.name);
+                                let updated;
+                                if (exists) {
+                                  updated = currentSups.filter(s => (typeof s === 'string' ? s : (s.name || s.englishName)) !== item.name);
+                                } else {
+                                  updated = [...currentSups, item.name];
+                                }
+                                setProfile(prev => ({ ...prev, supplements: updated }));
+                              }}
+                              className="liquid-pill"
+                              style={{
+                                padding: '10px 12px',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                background: isSelected ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                                border: isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                                color: isSelected ? '#ffffff' : 'var(--text-main)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '6px',
+                                boxShadow: isSelected ? '0 4px 15px var(--accent-glow)' : 'none',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <div style={{ textAlign: isRtl ? 'right' : 'left' }}>
+                                <div style={{ fontSize: '12.5px', fontWeight: '800' }}>{item.name}</div>
+                                {item.englishName && <div style={{ fontSize: '10px', opacity: 0.8 }}>{item.englishName}</div>}
+                              </div>
+                              {isSelected && <Check size={14} style={{ strokeWidth: 3 }} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* دوگمەی تەواوبوو */}
+            <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSupplementsModal(false);
+                  playSparkleSound();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '13px',
+                  borderRadius: '16px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '14px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 20px var(--accent-glow)'
+                }}
+              >
+                {language === 'en' ? 'Done & Save' : 'تەواوبوو و پاشەکەوتکردن'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== هێڵی خوارەوە (Luminous Purple-Blue Liquid Glass Bottom Bar) ==================== */}
       <nav 
         className="bottom-nav" 
@@ -10631,7 +11782,8 @@ export default function App() {
           paddingLeft: '6px',
           paddingRight: '6px',
           overflow: 'visible',
-          direction: 'ltr'
+          direction: 'ltr',
+          display: ((isKeyboardOpen || isChatInputFocused) && (activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach') ? 'none' : 'flex'
         }}
       >
         {/* پاشبنەمای قەوس و بڕاوەی شوشەیی */}
@@ -10702,7 +11854,7 @@ export default function App() {
                   userSelect: 'none'
                 }}
               >
-                {/* بازنەی ئایکۆنی بەرزبووەوەی شوشەیی مۆر و شین */}
+                {/* بازنەی ئایکۆنی بەرزبووەوەی شوشەیی مۆر و شین (بەرزکراوەتەوە بۆ 26px تا بە تەواوی لە شەیپەکە جیا ببێتەوە) */}
                 <div style={{
                   width: isActive ? '46px' : '32px',
                   height: isActive ? '46px' : '32px',
@@ -10713,7 +11865,7 @@ export default function App() {
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  transform: isActive ? 'translateY(-18px)' : 'translateY(0)',
+                  transform: isActive ? 'translateY(-26px)' : 'translateY(0)',
                   boxShadow: isActive 
                     ? '0 10px 22px var(--accent-glow), inset 0 2px 4px rgba(255, 255, 255, 0.65)' 
                     : 'none',
@@ -10729,7 +11881,7 @@ export default function App() {
                   fontSize: isActive ? '10.5px' : '10px', 
                   fontWeight: '800',
                   color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
-                  marginTop: isActive ? '-12px' : '1px',
+                  marginTop: isActive ? '-6px' : '2px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
