@@ -3076,17 +3076,36 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // دۆخی ناسنامەی میوان بۆ ئەو بەکارهێنەرانەی بەبێ هەژمار ئەپەکە بەکاردەهێنن
+  const [guestDeviceId, setGuestDeviceId] = useState(null);
+
   useEffect(() => {
-    if (!authUser || !isInitialCloudLoaded.current) return;
+    if (typeof window !== 'undefined') {
+      try {
+        let gId = localStorage.getItem('bq_guest_device_id');
+        if (!gId) {
+          gId = 'guest_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
+          localStorage.setItem('bq_guest_device_id', gId);
+        }
+        setGuestDeviceId(gId);
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    const activeSyncId = authUser?.uid || guestDeviceId;
+    if (!activeSyncId) return;
 
     const timer = setTimeout(async () => {
       try {
         const payload = safeSerialize({
           profile,
-          athleteId: authUser.uid,
-          name: profile?.name || authUser.displayName || 'یاریزانی BQ GYM',
-          phone: profile?.phone || authUser.phoneNumber || '',
-          email: authUser.email || '',
+          athleteId: activeSyncId,
+          isGuest: !authUser,
+          authType: authUser ? (authUser.phoneNumber ? 'phone' : 'google') : 'guest',
+          name: profile?.name || authUser?.displayName || (authUser ? 'یاریزانی BQ GYM' : 'یاریزانی میوان'),
+          phone: profile?.phone || authUser?.phoneNumber || '',
+          email: authUser?.email || '',
           isSuspended: isAppSuspended,
           status: isAppSuspended ? 'suspended' : 'active',
           dietMeals,
@@ -3105,19 +3124,20 @@ export default function App() {
           lastUpdated: new Date().toISOString()
         });
 
-        await setDoc(doc(db, 'users', authUser.uid), payload, { merge: true });
+        await setDoc(doc(db, 'users', activeSyncId), payload, { merge: true });
       } catch (error) {
         console.warn("Silent cloud auto-sync error:", error);
       }
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [authUser, profile, dietMeals, workoutCourse, courseHistory, coachMemory, hasCompletedOnboarding, chatMessages, exerciseLogs, waterMl, completedDayIndices, aiCustomFoods, theme, colorTheme, language, isAppSuspended]);
+  }, [authUser, guestDeviceId, profile, dietMeals, workoutCourse, courseHistory, coachMemory, hasCompletedOnboarding, chatMessages, exerciseLogs, waterMl, completedDayIndices, aiCustomFoods, theme, colorTheme, language, isAppSuspended]);
 
   // گوێگرتنی ڕاستەوخۆ بۆ دۆخی قفڵکردنی مۆبایل و گۆڕانکارییەکانی ڕاهێنەر
   useEffect(() => {
-    if (!authUser?.uid) return;
-    const unsub = subscribeToAthleteStatus(authUser.uid, ({ isSuspended, suspendReason, updatedWorkoutCourse }) => {
+    const targetId = authUser?.uid || guestDeviceId;
+    if (!targetId) return;
+    const unsub = subscribeToAthleteStatus(targetId, ({ isSuspended, suspendReason, updatedWorkoutCourse }) => {
       setIsAppSuspended(isSuspended);
       if (suspendReason) setAppSuspendReason(suspendReason);
       if (updatedWorkoutCourse) {
@@ -3128,7 +3148,7 @@ export default function App() {
       }
     });
     return () => unsub();
-  }, [authUser]);
+  }, [authUser, guestDeviceId]);
 
   // ژماردنی کۆی کالۆری و ماکرۆکان
   const allMealItems = dietMeals[selectedDayIdx] ? Object.values(dietMeals[selectedDayIdx]).flat().filter(item => item.isEaten) : [];
@@ -12069,7 +12089,11 @@ Rules:
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '24px',
+          paddingTop: 'max(env(safe-area-inset-top, 0px), 44px)',
+          paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 24px)',
+          paddingLeft: 'max(env(safe-area-inset-left, 0px), 16px)',
+          paddingRight: 'max(env(safe-area-inset-right, 0px), 16px)',
+          boxSizing: 'border-box',
           textAlign: 'center',
           direction: 'rtl'
         }}>
