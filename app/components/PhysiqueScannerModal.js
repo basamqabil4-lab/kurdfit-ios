@@ -152,8 +152,22 @@ export default function PhysiqueScannerModal({
     try {
       const video = videoRef.current;
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      const rawW = video.videoWidth || 640;
+      const rawH = video.videoHeight || 480;
+      const maxDim = 800;
+      let targetW = rawW;
+      let targetH = rawH;
+      if (targetW > maxDim || targetH > maxDim) {
+        if (targetW > targetH) {
+          targetH = Math.round((targetH * maxDim) / targetW);
+          targetW = maxDim;
+        } else {
+          targetW = Math.round((targetW * maxDim) / targetH);
+          targetH = maxDim;
+        }
+      }
+      canvas.width = targetW;
+      canvas.height = targetH;
       const ctx = canvas.getContext('2d');
 
       // ئەگەر کامێرای پێشەوە بوو، وێنەکە ئاوێنەیی ڕاست دەکەینەوە
@@ -162,7 +176,7 @@ export default function PhysiqueScannerModal({
         ctx.scale(-1, 1);
       }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/jpeg', 0.82);
+      const base64 = canvas.toDataURL('image/jpeg', 0.75);
 
       // فلاش و دەنگی سەرکەوتن
       setIsFlashing(true);

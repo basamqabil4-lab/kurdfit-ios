@@ -106,7 +106,7 @@ export const TRANSLATIONS = {
     daysRemaining: 'ڕۆژ ماوە',
     healthStatus: 'دۆخی تەندروستی',
     kg: 'کگ',
-    g: 'گرام',
+    g: 'g',
     kcal: 'کالۆری',
     change: 'گۆڕین',
     duration: 'ماوەی دیاریکراو',

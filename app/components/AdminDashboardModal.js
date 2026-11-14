@@ -86,15 +86,15 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
   // وێنەی گەورەکراو
   const [previewImage, setPreviewImage] = useState(null);
 
-  // چوونەژوورەوەی ئەدمین
+  // چوونەژوورەوەی ئەدمین بەپێی کۆدی نهێنی
   const handleLogin = (e) => {
     if (e) e.preventDefault();
     const cleanPin = pinInput.trim();
     
-    // دۆزینەوەی ئەدمین بەپێی PIN
+    // دۆزینەوەی ئەدمین بەپێی PIN لە لیستی فەرمی ئەدمینەکان
     const foundAdmin = adminsList.find(a => String(a.pin) === cleanPin);
 
-    if (foundAdmin || cleanPin === '7788' || cleanPin === 'admin123' || cleanPin === 'bqgym2026') {
+    if (foundAdmin || (DEFAULT_SUPER_ADMIN?.pin && cleanPin === String(DEFAULT_SUPER_ADMIN.pin))) {
       const activeAdm = foundAdmin || DEFAULT_SUPER_ADMIN;
       setCurrentAdmin(activeAdm);
       setAuthError('');

@@ -35,8 +35,34 @@ export async function uploadPhysiquePhotos(userId, capturedImages = {}) {
       const downloadUrl = await getDownloadURL(uploadResult.ref);
       resultUrls[`${pose}Url`] = downloadUrl;
     } catch (storageErr) {
-      console.warn(`Storage upload error for ${pose}, falling back to direct secure base64:`, storageErr.message);
-      resultUrls[`${pose}Url`] = base64Data;
+      console.warn(`Storage upload error for ${pose}, generating ultra-compact local thumbnail:`, storageErr.message);
+      try {
+        if (typeof document !== 'undefined') {
+          const img = new Image();
+          const thumbPromise = new Promise(resolve => {
+            img.onload = () => {
+              try {
+                const c = document.createElement('canvas');
+                c.width = 160;
+                c.height = Math.round((img.height * 160) / (img.width || 1)) || 200;
+                const ctx = c.getContext('2d');
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                resolve(c.toDataURL('image/jpeg', 0.45));
+              } catch {
+                resolve(null);
+              }
+            };
+            img.onerror = () => resolve(null);
+            img.src = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
+          });
+          const thumb = await thumbPromise;
+          resultUrls[`${pose}Url`] = thumb || null;
+        } else {
+          resultUrls[`${pose}Url`] = null;
+        }
+      } catch {
+        resultUrls[`${pose}Url`] = null;
+      }
     }
   }
 

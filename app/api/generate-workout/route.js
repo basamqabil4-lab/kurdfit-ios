@@ -31,59 +31,66 @@ export async function POST(request) {
       Equipment Available (if home): ${equipment || 'Bodyweight only'}
     `;
 
-    const prompt = `You are a world-class professional personal trainer and AI Fitness Coach.
-Create a highly personalized ${daysPerWeek}-day weekly workout split based STRICTLY on the user's profile:
+    const prompt = `You are an elite Sports Scientist and Master Hypertrophy Strength Coach.
+Create a modern, science-based, highly personalized ${daysPerWeek}-day weekly workout split based STRICTLY on the athlete profile:
 ${profileText}
 
-If they are female, select exercises appropriate for female anatomy and their specific body goals (e.g., glutes focus, waist shrinking).
-If they are male, select exercises appropriate for their goals (e.g., chest/shoulder width).
-If they have injuries (e.g., back, knee), REPLACE dangerous exercises with safe alternatives (e.g., replace barbell squats with leg press or bulgarian split squats if bad back).
-If they are at Home, ONLY use the equipment they have (or bodyweight).
+MANDATORY MODERN SPORTS SCIENCE PRINCIPLES:
+1. OPTIMAL SPLIT STRUCTURE (Muscle Protein Synthesis lasts 24-48 hours, so muscles need 2x/week stimulation):
+   - If ${daysPerWeek} === 4: STRICTLY use Upper / Lower Split (Saturday: Upper A, Sunday: Lower A, Monday: Rest, Tuesday: Upper B, Wednesday: Lower B, Thursday & Friday: Rest). NEVER use a 1x/week Bro-Split for 4 days.
+   - If ${daysPerWeek} === 3: STRICTLY use Full Body Split (Saturday: Full Body A, Monday: Full Body B, Wednesday: Full Body C, with rest days in between). This stimulates every major muscle 3x/week for peak natural hypertrophy.
+   - If ${daysPerWeek} === 2: STRICTLY use Full Body A and Full Body B (spaced 2-3 days apart).
+   - If ${daysPerWeek} === 5: STRICTLY use Upper / Lower + Push / Pull / Legs (Hybrid Split: Upper Power, Lower Power, Rest, Push Hypertrophy, Pull Hypertrophy, Legs Hypertrophy, Rest).
+   - If ${daysPerWeek} === 6: STRICTLY use Push A / Pull A / Legs A / Push B / Pull B / Legs B with biomechanical variation between day A and day B.
 
-CRITICAL RULES FOR HOME WORKOUTS:
-- If location is Home, NEVER invent improvised household item exercises (DO NOT use words like "Backpack", "Water bottle", "Couch", "Towel", "Broom").
-- For bodyweight home workouts, ONLY use pure floor & furniture exercises (NO gym bars, NO ladders):
-  * Chest: Push-ups, Diamond Push-ups, Wide Push-ups
-  * Back: Floor Reverse Push-up, Superman Holds, Glute Bridges
-  * Shoulders: Pike Push-ups, Plank Shoulder Taps
-  * Arms: Bench Dips, Diamond Push-ups, Bodyweight Biceps Curl
-  * Legs: Bodyweight Squats, Bulgarian Split Squats, Bodyweight Lunges, Glute Bridges, Bodyweight Standing Calf Raise
-  * Core: Plank, Crunches, Mountain Climbers, Lying Leg Raises, Russian Twists
-- If the user has Dumbbells at home, use real dumbbell exercise names: Dumbbell Biceps Curl, Dumbbell Floor Press, Dumbbell Shoulder Press, Dumbbell Goblet Squat, Dumbbell Romanian Deadlift, Dumbbell Lunges.
-- Every "englishName" MUST strictly be a standard, recognizable exercise name so that animated GIF demonstrations load properly and are never empty.
+2. EXERCISE TIER HIERARCHY & REST PERIODS WITHIN EACH WORKOUT:
+   - Tier 1 (Primary Heavy Compound - First exercise): Maximum CNS recruitment (e.g. Barbell Back Squat, Romanian Deadlift, Incline Dumbbell Bench Press, Barbell Bench Press, Lat Pulldown Wide, Overhead Press). 3-4 sets, 6-8 or 8-10 reps, 120s - 180s rest, rir: "RIR 1-2".
+   - Tier 2 (Secondary Compound - Second/Third exercise): High mechanical tension with controlled stability (e.g. Bulgarian Split Squats, Chest Supported Cable Row, Seated Dumbbell Press, Leg Press). 3-4 sets, 8-10 or 10-12 reps, 90s - 120s rest, rir: "RIR 1-2".
+   - Tier 3 (Isolation & Specialized Angles - Fourth/Fifth exercise): Targeting lengthened & shortened muscle positions (e.g. Cable Lateral Raise, Pec Deck Machine Fly, Seated Leg Curl, Leg Extension, Incline Dumbbell Biceps Curl, Overhead Cable Triceps Extension, Standing Calf Raise). 3 sets, 10-15 reps, 60s - 75s rest, rir: "RIR 0-1".
+   - Tier 4 (Core / Postural Integrity - Optional finisher): Plank, Cable Rope Crunch, Cable Face Pull. Rest: 45s - 60s.
 
-If their goal involves losing weight or fat (e.g. Cut, Weight Loss, Shrink), you MUST add a Cardio exercise (e.g., Treadmill Running, Cycling, Elliptical) for 15-20 minutes at the VERY END of the exercises array for EVERY non-rest day.
+3. BIOMECHANICAL DIVERSITY & NO JUNK VOLUME:
+   - NEVER program two redundant exercises with the same resistance angle in one workout (e.g. DO NOT do Flat Barbell Bench Press AND Flat Dumbbell Bench Press together).
 
-Goal Pace / Speed Instructions:
-- 'slow': 3 sets per exercise, 90s rest interval between sets, gentle/light cardio (12-15 min) for 1-2 days to preserve joints & all muscle.
-- 'normal': 3-4 sets per exercise, 60s rest interval, moderate cardio (15-20 min) 2-3 days (standard balanced pace).
-- 'fast': 4 sets per exercise, 45s rest interval, active cardio (20-25 min) 3-4 days to boost metabolic burn.
-- 'very_fast': 4-5 sets per exercise, 35s rest interval, interval cardio (25-30 min) for all non-rest days for maximum calorie burn.
+4. FATIGUE MANAGEMENT & SCIENTIFIC CARDIO:
+   - For fat loss, add 15-20 min Low-Impact Steady-State (LISS) cardio (e.g. Incline Treadmill Walking or Stationary Cycling) at the very end of non-rest days to preserve muscle and prevent the interference effect (do NOT program exhausting sprint HIIT after heavy strength lifts).
+
+5. GENDER & GOAL SPECIALIZATION:
+   - Female Athletes: Prioritize glutes, hamstrings, and toned posterior chain (Hip Thrust, Romanian Deadlift, Bulgarian Split Squats) with slightly higher rep stamina, plus posture/core toning.
+   - Male Athletes: Prioritize V-taper aesthetic (Upper clavicular chest, lat width, lateral deltoids).
+   - Health / Injuries: Replace any contraindicated movements (e.g. replace Barbell Squat with Leg Press or Goblet Squat if lower back/knee issues).
+
+6. HOME WORKOUT CONSTRAINTS:
+   - If location is Home, NEVER invent improvised household item exercises (DO NOT use words like "Backpack", "Water bottle", "Couch", "Towel", "Broom").
+   - For bodyweight home: Push-ups, Diamond Push-ups, Wide Push-ups, Floor Reverse Push-up, Superman Holds, Glute Bridges, Pike Push-ups, Bench Dips, Bodyweight Squats, Bulgarian Split Squats, Lunges, Standing Calf Raise, Plank, Crunches.
+   - If Dumbbells available at home: Dumbbell Romanian Deadlift, Dumbbell Goblet Squat, Dumbbell Floor Press, Dumbbell Shoulder Press, Dumbbell Lunges, Dumbbell Biceps Curl.
+   - Every "englishName" MUST be a standard, recognizable exercise name so that animated GIF demonstrations load properly.
 
 You MUST return a JSON object with this exact structure (no markdown tags, just raw JSON):
 {
-  "title": "Kurdish Title of the Split (e.g., خشتەی ٤ ڕۆژە - سەرەوە/خوارەوە)",
-  "goalDescription": "A 2-sentence Kurdish explanation of how this specific program helps their exact goal and respects their injuries.",
+  "title": "Kurdish Title of the Split (e.g., کۆرسی زانستی ٤ ڕۆژە - سەرەوە / خوارەوە (Upper/Lower))",
+  "goalDescription": "A 2-sentence Kurdish explanation of the scientific split, progressive overload, and injury precautions.",
   "daysPerWeek": ${daysPerWeek},
   "durationWeeks": 4,
   "totalDays": 28,
   "weeklyPlan": [
-    // Array of exactly 7 objects (from Saturday to Friday). 
-    // If daysPerWeek is 4, then 4 days must have isRestDay: false, and 3 must have isRestDay: true.
+    // Array of exactly 7 objects (Saturday to Friday).
+    // Exactly ${daysPerWeek} days must have isRestDay: false, and ${7 - daysPerWeek} days must have isRestDay: true (exercises: []).
     {
       "dayName": "شەممە",
       "dayKey": "saturday",
       "isRestDay": false,
-      "focus": "Kurdish Focus (e.g., سنگ و قۆڵ)",
-      "estimatedCalories": 400,
-      "duration": "٤٥ خولەک",
+      "focus": "Kurdish Focus (e.g., سەرەوە A - سنگ و پشت)",
+      "estimatedCalories": 440,
+      "duration": "٥٠ خولەک",
       "exercises": [
         {
           "name": "Kurdish Exercise Name",
-          "englishName": "English Exercise Name",
+          "englishName": "Standard English Exercise Name",
           "sets": 4,
           "reps": "8-10",
-          "rest": "60 چرکە",
+          "rest": "120s",
+          "rir": "RIR 1-2",
           "muscle": "سنگ"
         }
       ]
