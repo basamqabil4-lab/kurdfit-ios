@@ -359,25 +359,8 @@ export default function App() {
     setPhoneLoading(false);
   };
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-      setShowAuthModal(false);
-    } catch (error) {
-      if (
-        error?.code === 'auth/popup-blocked' ||
-        error?.code === 'auth/operation-not-supported-in-this-environment' ||
-        window.Capacitor?.isNativePlatform?.()
-      ) {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirectErr) {
-          console.error("Redirect login failed:", redirectErr);
-        }
-      }
-      console.error("Login failed:", error);
-    }
+  const handleLogin = () => {
+    setShowAuthModal(true);
   };
 
   const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
@@ -8246,12 +8229,12 @@ Rules:
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginBottom: '12px' }}>
                 <button 
-                  onClick={handleLogin}
+                  onClick={() => setShowAuthModal(true)}
                   style={{ background: '#ffffff', color: '#0f172a', border: 'none', borderRadius: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
-                  title="Google"
+                  title="Account"
                 >
-                  <img src="https://www.google.com/favicon.ico" width="14" height="14" alt="Google" />
-                  <span>{currentLangConfig.code === 'en' ? 'Connect Google' : currentLangConfig.code === 'ar' ? 'ربط بجوجل' : currentLangConfig.code === 'fa' ? 'اتصال به گوگل' : 'بەستنەوە بە گووگڵ'}</span>
+                  <Sparkles size={13} color="#9333EA" />
+                  <span>{currentLangConfig.code === 'en' ? 'Sign In / Register' : currentLangConfig.code === 'ar' ? 'تسجيل الدخول / حساب' : currentLangConfig.code === 'fa' ? 'ورود / ثبت‌نام' : 'چوونەژوورەوە / دروستکردنی هەژمار'}</span>
                 </button>
                 <button 
                   onClick={() => setShowAuthModal(true)}

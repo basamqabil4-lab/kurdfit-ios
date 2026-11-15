@@ -7,7 +7,8 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signInWithPhoneNumber, 
-  RecaptchaVerifier 
+  RecaptchaVerifier,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth, googleProvider } from '../../lib/firebase';
 
@@ -55,6 +56,8 @@ export default function AccountAuthModal({
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
   const isRtl = currentLangConfig.dir === 'rtl';
 
@@ -211,6 +214,31 @@ export default function AccountAuthModal({
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setErrorMessage('');
+    setSuccessMessage('');
+
+    // پشکنینی ژینگەی مۆبایلی نەیتیڤ (Capacitor لەسەر iOS / Android یان WebView)
+    const isNativeMobile = typeof window !== 'undefined' && (
+      window.Capacitor?.isNativePlatform?.() ||
+      window.location.protocol === 'capacitor:' ||
+      window.location.protocol === 'ionic:' ||
+      (window.location.hostname === 'localhost' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent))
+    );
+
+    if (isNativeMobile) {
+      setLoading(false);
+      // سیاسەتی ئاسایشی گووگڵ ڕێگری دەکات لە لۆگینی ڕاستەوخۆ لەناو WebView (disallowed_useragent 403).
+      // ڕێگری دەکەین لەوەی بەکارهێنەر لە پەڕەی گووگڵدا گیریان بخوات؛ و ڕاستەوخۆ ڕێنماییان دەکەین بۆ ئیمەیڵ یان مۆبایل.
+      setErrorMessage(
+        currentLangConfig.code === 'ar'
+          ? 'تنبيه: سياسة أمان جوجل تمنع الدخول المباشر داخل تطبيقات الهاتف. يرجى استخدام البريد الإلكتروني أو رقم الهاتف للدخول الآمن.'
+          : currentLangConfig.code === 'en'
+          ? 'Notice: Google security blocks OAuth inside mobile app WebViews. Please use Email or Phone Number for instant access.'
+          : 'ئاگاداری: یاسای ئاسایشی گووگڵ ڕێگری دەکات لە لۆگینی ناو وێبڤیوی مۆبایل. تکایە ئیمەیڵ یان ژمارەی مۆبایل بەکاربهێنە کە بە پارێزراوی کاردەکەن.'
+      );
+      setMethod('email');
+      return;
+    }
+
     try {
       const res = await signInWithPopup(auth, googleProvider);
       if (res && res.user) {
@@ -220,20 +248,63 @@ export default function AccountAuthModal({
       }
     } catch (error) {
       console.warn("Google popup error:", error);
-      if (
-        error?.code === 'auth/popup-blocked' ||
-        error?.code === 'auth/operation-not-supported-in-this-environment' ||
-        (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.())
-      ) {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirectErr) {
-          console.error("Redirect login failed:", redirectErr);
-          setErrorMessage(redirectErr.message);
-        }
+      if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user') {
+        setErrorMessage(
+          currentLangConfig.code === 'en'
+            ? 'Sign-in window was closed or blocked. Try email login.'
+            : 'پەنجەرەی گووگڵ داخرا یان بلۆک کرا. تکایە بە ئیمەیڵ بچۆ ژوورەوە.'
+        );
       } else {
         setErrorMessage(error.message || 'Google sign in failed');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // گەڕاندنەوەی وشەی نهێنی (Password Reset via Email)
+  const handleForgotPassword = async (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setErrorMessage(
+        currentLangConfig.code === 'ar'
+          ? 'يرجى إدخال بريدك الإلكتروني أولاً'
+          : currentLangConfig.code === 'en'
+          ? 'Please enter your email address first'
+          : 'تکایە سەرەتا ناونیشانی ئیمەیڵەکەت بنووسە'
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      setResetEmailSent(true);
+      setSuccessMessage(
+        currentLangConfig.code === 'ar'
+          ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.'
+          : currentLangConfig.code === 'en'
+          ? 'Password reset link sent to your email.'
+          : 'لینکی گۆڕینی وشەی نهێنی بۆ ئیمەیڵەکەت نێردرا. تکایە سندووقی نامەکانت بپشکنە.'
+      );
+    } catch (err) {
+      console.error('Password reset error:', err);
+      if (err.code === 'auth/user-not-found') {
+        setErrorMessage(
+          currentLangConfig.code === 'ar'
+            ? 'لا يوجد حساب مسجل بهذا البريد'
+            : currentLangConfig.code === 'en'
+            ? 'No account found with this email'
+            : 'هیچ هەژمارێک بەم ئیمەیڵە نەدۆزرایەوە'
+        );
+      } else if (err.code === 'auth/invalid-email') {
+        setErrorMessage(l.errorInvalidEmail);
+      } else {
+        setErrorMessage(err.message || 'Error sending reset email');
       }
     } finally {
       setLoading(false);
@@ -347,12 +418,16 @@ export default function AccountAuthModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px 16px',
+        paddingTop: 'max(env(safe-area-inset-top, 0px), 32px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 32px)',
+        paddingLeft: 'max(env(safe-area-inset-left, 0px), 16px)',
+        paddingRight: 'max(env(safe-area-inset-right, 0px), 16px)',
         background: 'rgba(6, 8, 14, 0.88)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
         direction: currentLangConfig.dir,
-        overflowY: 'auto'
+        overflowY: 'auto',
+        boxSizing: 'border-box'
       }}
     >
       {/* Background ambient radial glow (Only in dark mode) */}
@@ -378,6 +453,8 @@ export default function AccountAuthModal({
           zIndex: 1,
           width: '100%',
           maxWidth: '390px',
+          maxHeight: 'calc(100dvh - max(env(safe-area-inset-top, 0px), 32px) - max(env(safe-area-inset-bottom, 0px), 32px))',
+          overflowY: 'auto',
           background: '#131419',
           border: '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: '28px',
@@ -587,6 +664,148 @@ export default function AccountAuthModal({
 
         {/* Form Inputs Section */}
         {method === 'email' ? (
+          isForgotPassword ? (
+            <form onSubmit={handleForgotPassword} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ textAlign: isRtl ? 'right' : 'left', fontSize: '12.5px', color: '#94a3b8', lineHeight: '1.5' }}>
+                {currentLangConfig.code === 'ar' 
+                  ? 'أدخل بريدك الإلكتروني لإرسال رابط إعادة تعيين كلمة المرور:' 
+                  : currentLangConfig.code === 'en' 
+                  ? 'Enter your email to receive a password reset link:' 
+                  : 'ئیمەیڵەکەت بنووسە بۆ ئەوەی لینکی گۆڕینی وشەی نهێنیت بۆ بنێرین:'}
+              </div>
+
+              {/* Email Input */}
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  borderRadius: '14px',
+                  boxSizing: 'border-box',
+                  background: emailFocused
+                    ? 'linear-gradient(#14151c, #14151c) padding-box, linear-gradient(90deg, #ec4899 0%, #a855f7 22%, #3b82f6 45%, #06b6d4 68%, #10b981 85%, #eab308 100%) border-box'
+                    : '#191a21',
+                  border: emailFocused ? '1.6px solid transparent' : '1px solid rgba(255, 255, 255, 0.08)',
+                  boxShadow: emailFocused ? '0 0 16px rgba(168, 85, 247, 0.25), 0 0 4px rgba(56, 189, 248, 0.3)' : 'none',
+                  transition: 'all 0.25s ease',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <input
+                  type="email"
+                  placeholder={l.emailPlaceholder}
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  dir="ltr"
+                  style={{
+                    width: '100%',
+                    height: '48px',
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    padding: '0 16px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#ffffff',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Error or Success Notice */}
+              {errorMessage && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#f87171',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    textAlign: 'start'
+                  }}
+                >
+                  <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {successMessage && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#34d399',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    textAlign: 'start'
+                  }}
+                >
+                  <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
+              {/* Submit Reset Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  height: '46px',
+                  borderRadius: '9999px',
+                  background: '#ffffff',
+                  color: '#08090c',
+                  fontSize: '14px',
+                  fontWeight: '800',
+                  border: 'none',
+                  cursor: 'pointer',
+                  marginTop: '6px',
+                  boxShadow: '0 4px 18px rgba(255, 255, 255, 0.18)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  opacity: loading ? 0.7 : 1
+                }}
+              >
+                {loading ? '...' : (currentLangConfig.code === 'ar' ? 'إرسال رابط التعيين' : currentLangConfig.code === 'en' ? 'Send Reset Link' : 'ناردنی لینکی گۆڕین')}
+              </button>
+
+              {/* Back to normal auth */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForgotPassword(false);
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  padding: '6px 0',
+                  textDecoration: 'underline'
+                }}
+              >
+                {currentLangConfig.code === 'ar' ? 'الرجوع إلى تسجيل الدخول' : currentLangConfig.code === 'en' ? 'Back to Sign In' : 'گەڕانەوە بۆ چوونەژوورەوە'}
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleEmailAuth} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* 1. Email Input */}
             <div
@@ -693,6 +912,32 @@ export default function AccountAuthModal({
               </button>
             </div>
 
+            {/* Forgot password link */}
+            {authMode === 'signin' && (
+              <div style={{ display: 'flex', justifyContent: isRtl ? 'flex-start' : 'flex-end', width: '100%', marginTop: '-4px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsForgotPassword(true);
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    fontSize: '11.5px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  {currentLangConfig.code === 'ar' ? 'هل نسيت كلمة المرور؟' : currentLangConfig.code === 'en' ? 'Forgot password?' : 'وشەی نهێنیت لەبیرچووە؟'}
+                </button>
+              </div>
+            )}
+
             {/* Error or Success Notice */}
             {errorMessage && (
               <div
@@ -769,7 +1014,7 @@ export default function AccountAuthModal({
               )}
             </button>
           </form>
-        ) : (
+        )) : (
           /* Phone OTP SMS Section */
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {!confirmationResult ? (
@@ -1000,8 +1245,8 @@ export default function AccountAuthModal({
           </button>
         )}
 
-        {/* Invisible Recaptcha Container */}
-        <div id="bq-recaptcha-container" style={{ position: 'fixed', bottom: 0, opacity: 0, pointerEvents: 'none' }} />
+        {/* Invisible Recaptcha Container for SMS OTP Verification */}
+        <div id="bq-recaptcha-container" />
       </div>
     </div>
   );

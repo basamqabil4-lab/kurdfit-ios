@@ -85,6 +85,8 @@ html, body {
   touch-action: pan-x pan-y;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   background-color: var(--bg-color);
   background-image: none;
   color: var(--text-main);
@@ -93,6 +95,20 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.45;
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+input, textarea {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+}
+
+/* Recaptcha container styling for mobile and web verification */
+#bq-recaptcha-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  z-index: 100000;
 }
 
 /* Liquid Glass Ambient Background Mesh & Fixed Mobile Shell */
