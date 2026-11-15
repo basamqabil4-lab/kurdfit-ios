@@ -6249,15 +6249,7 @@ Rules:
 
 
 
-          {/* ڕوونکردنەوەی زیرەکی دەستکرد لەسەر چۆنیەتی داڕشتنی کۆرسەکە */}
-          {workoutCourse?.rationale && (
-            <div className="liquid-card" style={{ padding: '12px 14px', marginBottom: '14px', border: '1px solid rgba(168, 85, 247, 0.35)', background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%)', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <Sparkles size={18} color="#a855f7" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div style={{ fontSize: '12px', lineHeight: '1.6', color: 'var(--text-main)', fontWeight: '700' }}>
-                {workoutCourse.rationale}
-              </div>
-            </div>
-          )}
+
 
           {/* ڕێبەری زانستیی کاپتن: یاسای زیادکردنی بار (Progressive Overload & RIR Guide) */}
           <div 
@@ -7280,9 +7272,6 @@ Rules:
                       {currentLangConfig.code === 'en' ? 'Back' : currentLangConfig.code === 'ar' ? 'رجوع' : currentLangConfig.code === 'fa' ? 'بازگشت' : 'گەڕانەوە'}
                     </button>
                   </div>
-                  <p className="text-subtle" style={{ fontSize: '12.5px', marginBottom: '18px', color: 'var(--text-muted)' }}>
-                    {currentLangConfig.code === 'en' ? 'Select the diet protocol for AI to create your meal plan:' : currentLangConfig.code === 'ar' ? 'اختر نمط النظام الغذائي ليقوم الذكاء الاصطناعي بإعداد خطتك:' : currentLangConfig.code === 'fa' ? 'نوع رژیم غذایی را انتخاب کنید تا هوش مصنوعی برنامه شما را بسازد:' : 'جۆری ئەو دایتە هەڵبژێرە کە دەتەوێت ئەی ئای خشتەکەتی لەسەر دروست بکات:'}
-                  </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
                     {[
@@ -9300,10 +9289,6 @@ Rules:
               </div>
               <button onClick={() => setShowAiDietModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', color: 'var(--text-muted)', cursor: 'pointer' }}><UIIcon name="X" size={16} /></button>
             </div>
-            
-            <p className="text-subtle" style={{ fontSize: '13px', marginBottom: '20px', lineHeight: '1.6' }}>
-              {currentLangConfig.code === 'en' ? 'To replace your current plan with a new one, select your preferred diet protocol for AI generation:' : currentLangConfig.code === 'ar' ? 'إذا كنت ترغب في استبدال خطتك الحالية بأخرى جديدة، يرجى اختيار النمط الغذائي الذي تريده:' : currentLangConfig.code === 'fa' ? 'اگر می‌خواهید برنامه فعلی را با برنامه جدید جایگزین کنید، لطفاً نوع رژیم غذایی را انتخاب کنید:' : 'ئەگەر دەتەوێت خشتەی پێشووت بسڕیتەوە و یەکێکی نوێ دروست بکەیت، تکایە جۆری ئەو دایتە هەڵبژێرە کە دەتەوێت ئەی ئای خشتەکەتی لەسەر دروست بکات:'}
-            </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
               {[
