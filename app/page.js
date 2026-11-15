@@ -8158,108 +8158,522 @@ Rules:
             </div>
           </header>
 
-          {/* کارتی سەرەکی پرۆفایل */}
-          <div className="dark-card" style={{ position: 'relative', padding: '24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px' }}>
-            {/* دوگمەی قەڵەم بۆ دەستکاری پرۆفایل لە لای چەپ */}
-            <button 
-              onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
-              style={{ position: 'absolute', top: '16px', left: '16px', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)', transition: 'all 0.2s' }}
-              title={t('editProfile')}
+          {/* ==================== کارتی سەرەکی پرۆفایلی وەرزشەوان (Modern Athlete Profile Card) ==================== */}
+          <div 
+            className="dark-card" 
+            style={{ 
+              position: 'relative', 
+              borderRadius: '28px', 
+              overflow: 'hidden', 
+              marginBottom: '20px', 
+              padding: 0, 
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08)' 
+            }}
+          >
+            {/* 1. بەشی سەرەوە: وێنەی کەڤەری مۆدێرن (Top 3D Cover Banner) */}
+            <div
+              style={{
+                position: 'relative',
+                height: '130px',
+                width: '100%',
+                background: 'linear-gradient(135deg, #3730a3 0%, #6366f1 35%, #8b5cf6 65%, #ec4899 100%)',
+                overflow: 'hidden'
+              }}
             >
-              <EditIcon size={16} />
-            </button>
+              {/* شێوەیەکی 3D گرادێنت وەک وێنەی ئاماژەپێکراو (Curved 3D Cap / Wave Shape) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-25px',
+                  right: isRtl ? 'auto' : '-15px',
+                  left: isRtl ? '-15px' : 'auto',
+                  width: '160px',
+                  height: '160px',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(244, 114, 182, 0.6) 0%, rgba(139, 92, 246, 0.25) 55%, transparent 75%)',
+                  filter: 'blur(16px)',
+                  pointerEvents: 'none'
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '-20px',
+                  left: isRtl ? 'auto' : '35px',
+                  right: isRtl ? '35px' : 'auto',
+                  width: '120px',
+                  height: '120px',
+                  borderRadius: '45px',
+                  background: 'linear-gradient(45deg, rgba(56, 189, 248, 0.45), rgba(99, 102, 241, 0.6))',
+                  transform: 'rotate(30deg)',
+                  filter: 'blur(8px)',
+                  pointerEvents: 'none'
+                }}
+              />
 
-            {/* دوگمەی دەرچوون یان چوونەژوورەوە وەک ئایکۆن لە لای ڕاست */}
-            {authUser ? (
-              <button 
-                type="button"
-                onClick={() => setShowLogoutConfirmModal(true)}
-                style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '12px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444', transition: 'all 0.2s' }}
-                title={t('logout') || "Log Out"}
+              {/* تیری 3D مۆر و گوڵەبەڕۆژە وەک دیزاینەکەی وێنە (3D Arrow & Sphere Accent) */}
+              <svg
+                style={{
+                  position: 'absolute',
+                  top: '14px',
+                  right: isRtl ? 'auto' : '18px',
+                  left: isRtl ? '18px' : 'auto',
+                  opacity: 0.9,
+                  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.35))'
+                }}
+                width="46"
+                height="46"
+                viewBox="0 0 48 48"
+                fill="none"
               >
-                <LogOut size={16} />
-              </button>
-            ) : (
-              <button 
-                onClick={() => setShowAuthModal(true)}
-                style={{ position: 'absolute', top: '16px', right: '16px', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-primary)', transition: 'all 0.2s' }}
-                title={t('login') || "Sign In"}
-              >
-                <User size={16} />
-              </button>
-            )}
+                {/* 3D Arrow pointer */}
+                <path d="M12 10L38 20L26 26L20 38L12 10Z" fill="url(#arrowGrad)" />
+                <path d="M12 10L38 20L26 26L12 10Z" fill="rgba(255,255,255,0.25)" />
+                <defs>
+                  <linearGradient id="arrowGrad" x1="12" y1="10" x2="38" y2="38" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#c084fc" />
+                    <stop offset="1" stopColor="#9333ea" />
+                  </linearGradient>
+                </defs>
+              </svg>
 
-            {/* وێنەی پرۆفایل لەگەڵ ئایکۆنی گووگڵ ئەگەر چوبێتە ژوورەوە */}
-            {authUser?.photoURL ? (
-              <div style={{ position: 'relative', width: '58px', height: '58px' }}>
-                <img 
-                  src={authUser.photoURL} 
-                  alt={authUser.displayName || 'Profile'} 
-                  style={{ width: '58px', height: '58px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent-primary)', boxShadow: '0 0 16px var(--accent-glow)' }} 
-                />
-                <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '18px', height: '18px', borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)' }}>
-                  <img src="https://www.google.com/favicon.ico" width="11" height="11" alt="Google" />
+              {/* دوگمەکانی سەری کەڤەر (Top Corner Buttons) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  left: isRtl ? '12px' : 'auto',
+                  right: isRtl ? 'auto' : '12px',
+                  display: 'flex',
+                  gap: '8px',
+                  zIndex: 5
+                }}
+              >
+                {authUser ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowLogoutConfirmModal(true)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.4)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '50%',
+                      width: '36px',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#f87171',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                    }}
+                    title={t('logout') || "Log Out"}
+                  >
+                    <LogOut size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthModal(true)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.4)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '50%',
+                      width: '36px',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                    }}
+                    title={t('login') || "Sign In"}
+                  >
+                    <User size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 2. بەشی خوارەوەی کارتەکە (Card Body) */}
+            <div style={{ padding: '0 20px 22px 20px', position: 'relative' }}>
+              {/* ئاڤاتاری سەرکەوتوو (Overlapping Avatar) لەگەڵ دوگمەی Bookmark/Edit */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  justifyContent: 'space-between',
+                  marginTop: '-44px',
+                  marginBottom: '14px',
+                  position: 'relative',
+                  zIndex: 4
+                }}
+              >
+                {/* وێنەی پرۆفایلی وەرزشەوان بە چوارچێوەی ئەستوور */}
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '84px',
+                    height: '84px',
+                    borderRadius: '50%',
+                    background: 'var(--bg-color)',
+                    padding: '4px',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  {authUser?.photoURL ? (
+                    <img
+                      src={authUser.photoURL}
+                      alt={authUser.displayName || 'Profile'}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #a855f7 0%, #3b82f6 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        fontSize: '30px',
+                        fontWeight: '800'
+                      }}
+                    >
+                      {getLocalizedAthleteName(profile.name, language).charAt(0) || 'B'}
+                    </div>
+                  )}
+
+                  {/* نیشانەی سەوزی چالاک (Online Status Dot) */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '2px',
+                      right: isRtl ? 'auto' : '2px',
+                      left: isRtl ? '2px' : 'auto',
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      background: '#10B981',
+                      border: '2.5px solid var(--bg-color)',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
+                    }}
+                    title="Active Athlete"
+                  />
+                </div>
+
+                {/* دوگمەی هێمای گۆڕینی پرۆفایل (وەک دوگمەی Bookmark لە وێنەی ئاماژەپێکراودا) */}
+                <button
+                  type="button"
+                  onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-main)',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  title={t('editProfile')}
+                >
+                  <EditIcon size={18} />
+                </button>
+              </div>
+
+              {/* ناوی وەرزشەوان و ناونیشانی پسپۆڕی/ئامانج */}
+              <div style={{ textAlign: 'start', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h2
+                    style={{
+                      fontSize: '22px',
+                      fontWeight: '900',
+                      letterSpacing: '-0.4px',
+                      color: 'var(--text-main)',
+                      margin: 0
+                    }}
+                  >
+                    {getLocalizedAthleteName(profile.name, language)}
+                  </h2>
+                  {authUser && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                        background: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        color: '#34d399',
+                        fontWeight: '700'
+                      }}
+                    >
+                      {authUser.email || authUser.phoneNumber}
+                    </span>
+                  )}
+                </div>
+
+                <p
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: 'var(--text-muted)',
+                    margin: '3px 0 0 0'
+                  }}
+                >
+                  {getLocalizedGoal(profile.goal, language)} • {profile.trainingLocation === 'home' ? (currentLangConfig.code === 'en' ? 'Home Athlete' : 'ڕاهێنانی ماڵەوە') : (currentLangConfig.code === 'en' ? 'Gym Athlete' : 'وەرزشەوانی هۆڵ')}
+                </p>
+              </div>
+
+              {/* باجەکان (Pill Badges) هاوشێوەی Jitter Expert لە دیزاینەکەی وێنەدا */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  marginBottom: '20px'
+                }}
+              >
+                {/* باجی براند */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                    padding: '5px 12px 5px 6px',
+                    borderRadius: '9999px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    color: 'var(--text-main)'
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '9px',
+                      fontWeight: '900',
+                      color: '#ffffff'
+                    }}
+                  >
+                    BQ
+                  </div>
+                  <span>KurdFit Pro</span>
+                </div>
+
+                {/* باجی خێرایی/شێوازی ئامانج */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '9999px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    color: 'var(--text-muted)'
+                  }}
+                >
+                  <span>{profile.goalPace === 'slow' ? '⏱️' : profile.goalPace === 'fast' ? '🔥' : profile.goalPace === 'very_fast' ? '🚀' : '⚡'}</span>
+                  <span>{getLocalizedPace(profile.goalPace || 'normal', language)}</span>
+                </div>
+
+                {/* باجی ڕۆژەکانی هەفتە */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '9999px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    color: 'var(--text-muted)'
+                  }}
+                >
+                  <span>📅</span>
+                  <span>{profile.availableDaysPerWeek || 4} {currentLangConfig.code === 'en' ? 'Days/W' : 'ڕۆژ/هەفتە'}</span>
+                </div>
+
+                {/* نیشانەی ژمارەی فۆکەسەکان (+X) وەک +6 لە وێنەکەدا */}
+                {profile.bodyGoals?.enlarge?.length > 0 && (
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: '28px',
+                      height: '28px',
+                      padding: '0 8px',
+                      borderRadius: '9999px',
+                      background: 'var(--card-subtle)',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      color: 'var(--text-muted)'
+                    }}
+                    title={`Focus: ${profile.bodyGoals.enlarge.join(', ')}`}
+                  >
+                    +{profile.bodyGoals.enlarge.length}
+                  </div>
+                )}
+              </div>
+
+              {/* داتاکان بە هێڵی دابەشکەری ستوونی (4-Column Metric Grid with Separators) */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  width: '100%',
+                  padding: '16px 0',
+                  marginBottom: '20px',
+                  borderTop: '1px solid var(--border-color)',
+                  borderBottom: '1px solid var(--border-color)'
+                }}
+              >
+                {/* 1. کێشی ئێستا (★ Rating style) */}
+                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: isRtl ? 'none' : '1px solid var(--border-color)', borderLeft: isRtl ? '1px solid var(--border-color)' : 'none' }}>
+                  <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                    <span style={{ fontSize: '13px', color: '#F59E0B' }}>★</span>
+                    <span>{profile.weight}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginTop: '3px' }}>
+                    {t('weight')} ({t('kg')})
+                  </div>
+                </div>
+
+                {/* 2. کێشی ئامانج */}
+                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: isRtl ? 'none' : '1px solid var(--border-color)', borderLeft: isRtl ? '1px solid var(--border-color)' : 'none' }}>
+                  <div style={{ fontSize: '17px', fontWeight: '900', color: '#38BDF8' }}>
+                    {profile.targetWeight}
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginTop: '3px' }}>
+                    {t('targetWeight')}
+                  </div>
+                </div>
+
+                {/* 3. باڵا */}
+                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: isRtl ? 'none' : '1px solid var(--border-color)', borderLeft: isRtl ? '1px solid var(--border-color)' : 'none' }}>
+                  <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>
+                    {profile.height}
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginTop: '3px' }}>
+                    {t('height')} ({t('cm')})
+                  </div>
+                </div>
+
+                {/* 4. تەمەن */}
+                <div style={{ textAlign: 'center', padding: '0 4px' }}>
+                  <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>
+                    {profile.age}
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginTop: '3px' }}>
+                    {t('age')}
+                  </div>
                 </div>
               </div>
-            ) : (
-              <ProfilePic gender={profile.gender} size={58} />
-            )}
 
-            <h2 style={{ fontSize: '20px', fontWeight: '800', marginTop: '12px', marginBottom: '2px' }}>{getLocalizedAthleteName(profile.name, language)}</h2>
-
-            {/* بەشی هەژمار ڕاستەوخۆ لەسەر کارتەکە */}
-            {authUser ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }}></span>
-                  <span style={{ fontWeight: '700' }}>{authUser.email || authUser.phoneNumber}</span>
-                </span>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginBottom: '12px' }}>
-                <button 
-                  onClick={() => setShowAuthModal(true)}
-                  style={{ background: '#ffffff', color: '#0f172a', border: 'none', borderRadius: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
-                  title="Account"
+              {/* دوگمەی خوارەوە بە تەواوی هاوشێوەی دوگمەی "Get In Touch" بەڵام بەپێی ئەپەکە */}
+              {authUser ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoalFormData({
+                      targetWeight: profile.targetWeight,
+                      targetDays: profile.targetDays,
+                      goal: profile.goal,
+                      goalPace: profile.goalPace || 'normal',
+                      bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] }
+                    });
+                    setShowGoalModal(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '46px',
+                    borderRadius: '9999px',
+                    background: theme === 'dark' ? '#ffffff' : '#0f172a',
+                    color: theme === 'dark' ? '#0f172a' : '#ffffff',
+                    fontSize: '13.5px',
+                    fontWeight: '800',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(0.99)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
-                  <Sparkles size={13} color="#9333EA" />
-                  <span>{currentLangConfig.code === 'en' ? 'Sign In / Register' : currentLangConfig.code === 'ar' ? 'تسجيل الدخول / حساب' : currentLangConfig.code === 'fa' ? 'ورود / ثبت‌نام' : 'چوونەژوورەوە / دروستکردنی هەژمار'}</span>
+                  <TargetIcon size={16} />
+                  <span>{currentLangConfig.code === 'en' ? 'Update Goal & Targets' : currentLangConfig.code === 'ar' ? 'تعديل الهدف والأوزان' : currentLangConfig.code === 'fa' ? 'ویرایش هدف ورزشی' : 'نوێکردنەوەی ئامانج و پێوانەکان'}</span>
                 </button>
-                <button 
+              ) : (
+                <button
+                  type="button"
                   onClick={() => setShowAuthModal(true)}
-                  className="liquid-pill"
-                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                  title={currentLangConfig.code === 'en' ? 'Phone login' : currentLangConfig.code === 'ar' ? 'تسجيل بالهاتف' : currentLangConfig.code === 'fa' ? 'ورود با شماره موبایل' : 'چوونەژوورەوە بە ژمارەی مۆبایل'}
+                  style={{
+                    width: '100%',
+                    height: '46px',
+                    borderRadius: '9999px',
+                    background: theme === 'dark' ? '#ffffff' : '#0f172a',
+                    color: theme === 'dark' ? '#0f172a' : '#ffffff',
+                    fontSize: '13.5px',
+                    fontWeight: '800',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(0.99)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
-                  <Phone size={13} color="var(--accent-primary)" />
-                  <span>{currentLangConfig.code === 'en' ? 'Phone' : currentLangConfig.code === 'ar' ? 'الهاتف' : currentLangConfig.code === 'fa' ? 'موبایل' : 'مۆبایل'}</span>
+                  <Sparkles size={16} color="#9333ea" />
+                  <span>{currentLangConfig.code === 'en' ? 'Sign In / Connect Account' : currentLangConfig.code === 'ar' ? 'تسجيل الدخول / ربط الحساب' : currentLangConfig.code === 'fa' ? 'ورود به حساب کاربری' : 'چوونەژوورەوە / بەستنەوەی هەژمار'}</span>
                 </button>
-              </div>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', width: '100%', gap: '6px', borderTop: '1px solid var(--border-color)', paddingTop: '18px', textAlign: 'center', marginTop: '8px' }}>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)' }}>{profile.weight}</div>
-                <div className="text-subtle" style={{ fontSize: '11px', marginTop: '2px' }}>{t('weight')} ({t('kg')})</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--color-carbs)' }}>{profile.targetWeight}</div>
-                <div className="text-subtle" style={{ fontSize: '11px', marginTop: '2px' }}>{t('targetWeight')} ({t('kg')})</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)' }}>{profile.height}</div>
-                <div className="text-subtle" style={{ fontSize: '11px', marginTop: '2px' }}>{t('height')} ({t('cm')})</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)' }}>{profile.age}</div>
-                <div className="text-subtle" style={{ fontSize: '11px', marginTop: '2px' }}>{t('age')}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '14.5px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                  {profile.gender === 'female' ? <FemaleIcon size={15} color="var(--text-main)" /> : <MaleIcon size={15} color="var(--text-main)" />}
-                  <span>{profile.gender === 'female' ? t('female') : t('male')}</span>
-                </div>
-                <div className="text-subtle" style={{ fontSize: '11px', marginTop: '2px' }}>{t('gender')}</div>
-              </div>
+              )}
             </div>
           </div>
 
