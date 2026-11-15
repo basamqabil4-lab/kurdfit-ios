@@ -8356,7 +8356,7 @@ Rules:
                   />
                 </div>
 
-                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Circular Transparent Shape with White Stroke + Blue Icon) */}
+                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Circular Transparent Shape with White Stroke + White Filled Icon) */}
                 <button
                   type="button"
                   onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
@@ -8371,7 +8371,7 @@ Rules:
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#2563eb',
+                    color: '#ffffff',
                     cursor: 'pointer',
                     boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
                     transition: 'all 0.2s ease',
@@ -8381,7 +8381,7 @@ Rules:
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
                   title={t('editProfile')}
                 >
-                  <EditIcon size={18} color="#2563eb" />
+                  <EditIcon size={18} color="#ffffff" filled={true} />
                 </button>
               </div>
 
@@ -8681,7 +8681,7 @@ Rules:
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#2563eb',
+                    color: '#ffffff',
                     cursor: 'pointer',
                     boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
                     transition: 'all 0.2s ease',
@@ -8691,7 +8691,7 @@ Rules:
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
                   title={t('change')}
                 >
-                  <EditIcon size={18} color="#2563eb" />
+                  <EditIcon size={18} color="#ffffff" filled={true} />
                 </button>
               </div>
             </div>
@@ -8825,7 +8825,7 @@ Rules:
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#2563eb',
+                  color: '#ffffff',
                   cursor: 'pointer',
                   boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
                   transition: 'all 0.2s ease',
@@ -8835,7 +8835,7 @@ Rules:
                 onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
                 title={language === 'en' ? 'Edit' : 'دەستکاری'}
               >
-                <EditIcon size={18} color="#2563eb" />
+                <EditIcon size={18} color="#ffffff" filled={true} />
               </button>
             </div>
 
