@@ -8158,7 +8158,7 @@ Rules:
             </div>
           </header>
 
-          {/* ==================== کارتی سەرەکی پرۆفایلی وەرزشەوان (Modern Athlete Profile Card) ==================== */}
+          {/* ==================== کارتی سەرەکی پرۆفایلی وەرزشەوان (Modern Athlete Profile Card - LTR with GYM Background) ==================== */}
           <div 
             className="dark-card" 
             style={{ 
@@ -8168,83 +8168,56 @@ Rules:
               marginBottom: '20px', 
               padding: 0, 
               border: '1px solid var(--border-color)',
-              boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08)' 
+              boxShadow: '0 16px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+              direction: 'ltr',
+              textAlign: 'left'
             }}
           >
-            {/* 1. بەشی سەرەوە: وێنەی کەڤەری مۆدێرن (Top 3D Cover Banner) */}
+            {/* 1. بەشی سەرەوە: کەڤەری وێنەی هۆڵی وەرزش (Top GYM Cover Banner) */}
             <div
               style={{
                 position: 'relative',
-                height: '130px',
+                height: '145px',
                 width: '100%',
-                background: 'linear-gradient(135deg, #3730a3 0%, #6366f1 35%, #8b5cf6 65%, #ec4899 100%)',
+                backgroundImage: "linear-gradient(180deg, rgba(15, 23, 42, 0.3) 0%, rgba(10, 12, 18, 0.9) 100%), url('/images/gym-cover.jpg')",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
                 overflow: 'hidden'
               }}
             >
-              {/* شێوەیەکی 3D گرادێنت وەک وێنەی ئاماژەپێکراو (Curved 3D Cap / Wave Shape) */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '-25px',
-                  right: isRtl ? 'auto' : '-15px',
-                  left: isRtl ? '-15px' : 'auto',
-                  width: '160px',
-                  height: '160px',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(244, 114, 182, 0.6) 0%, rgba(139, 92, 246, 0.25) 55%, transparent 75%)',
-                  filter: 'blur(16px)',
-                  pointerEvents: 'none'
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: '-20px',
-                  left: isRtl ? 'auto' : '35px',
-                  right: isRtl ? '35px' : 'auto',
-                  width: '120px',
-                  height: '120px',
-                  borderRadius: '45px',
-                  background: 'linear-gradient(45deg, rgba(56, 189, 248, 0.45), rgba(99, 102, 241, 0.6))',
-                  transform: 'rotate(30deg)',
-                  filter: 'blur(8px)',
-                  pointerEvents: 'none'
-                }}
-              />
-
-              {/* تیری 3D مۆر و گوڵەبەڕۆژە وەک دیزاینەکەی وێنە (3D Arrow & Sphere Accent) */}
-              <svg
-                style={{
-                  position: 'absolute',
-                  top: '14px',
-                  right: isRtl ? 'auto' : '18px',
-                  left: isRtl ? '18px' : 'auto',
-                  opacity: 0.9,
-                  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.35))'
-                }}
-                width="46"
-                height="46"
-                viewBox="0 0 48 48"
-                fill="none"
-              >
-                {/* 3D Arrow pointer */}
-                <path d="M12 10L38 20L26 26L20 38L12 10Z" fill="url(#arrowGrad)" />
-                <path d="M12 10L38 20L26 26L12 10Z" fill="rgba(255,255,255,0.25)" />
-                <defs>
-                  <linearGradient id="arrowGrad" x1="12" y1="10" x2="38" y2="38" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#c084fc" />
-                    <stop offset="1" stopColor="#9333ea" />
-                  </linearGradient>
-                </defs>
-              </svg>
-
-              {/* دوگمەکانی سەری کەڤەر (Top Corner Buttons) */}
+              {/* باجی هۆڵی وەرزش لە لای چەپ (GYM Badge on Left) */}
               <div
                 style={{
                   position: 'absolute',
                   top: '12px',
-                  left: isRtl ? '12px' : 'auto',
-                  right: isRtl ? 'auto' : '12px',
+                  left: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  borderRadius: '9999px',
+                  background: 'rgba(0, 0, 0, 0.45)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                  zIndex: 5
+                }}
+              >
+                <span>🏋️</span>
+                <span>BQ GYM</span>
+              </div>
+
+              {/* دوگمەی دەرچوون یان چوونەژوورەوە لە لای ڕاست (Logout / Account Button on Right) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '14px',
                   display: 'flex',
                   gap: '8px',
                   zIndex: 5
@@ -8255,9 +8228,9 @@ Rules:
                     type="button"
                     onClick={() => setShowLogoutConfirmModal(true)}
                     style={{
-                      background: 'rgba(0, 0, 0, 0.4)',
-                      backdropFilter: 'blur(8px)',
-                      WebkitBackdropFilter: 'blur(8px)',
+                      background: 'rgba(0, 0, 0, 0.45)',
+                      backdropFilter: 'blur(10px)',
+                      WebkitBackdropFilter: 'blur(10px)',
                       border: '1px solid rgba(255, 255, 255, 0.2)',
                       borderRadius: '50%',
                       width: '36px',
@@ -8279,9 +8252,9 @@ Rules:
                     type="button"
                     onClick={() => setShowAuthModal(true)}
                     style={{
-                      background: 'rgba(0, 0, 0, 0.4)',
-                      backdropFilter: 'blur(8px)',
-                      WebkitBackdropFilter: 'blur(8px)',
+                      background: 'rgba(0, 0, 0, 0.45)',
+                      backdropFilter: 'blur(10px)',
+                      WebkitBackdropFilter: 'blur(10px)',
                       border: '1px solid rgba(255, 255, 255, 0.2)',
                       borderRadius: '50%',
                       width: '36px',
@@ -8302,9 +8275,9 @@ Rules:
               </div>
             </div>
 
-            {/* 2. بەشی خوارەوەی کارتەکە (Card Body) */}
-            <div style={{ padding: '0 20px 22px 20px', position: 'relative' }}>
-              {/* ئاڤاتاری سەرکەوتوو (Overlapping Avatar) لەگەڵ دوگمەی Bookmark/Edit */}
+            {/* 2. بەشی خوارەوەی کارتەکە: تەواوی ئاراستەکەی چەپ بۆ ڕاست (Card Body - LTR) */}
+            <div style={{ padding: '0 20px 22px 20px', position: 'relative', direction: 'ltr', textAlign: 'left' }}>
+              {/* ئاڤاتار لە چەپ، دوگمەی قەڵەم لە ڕاست (Avatar on LEFT, Action Button on RIGHT) */}
               <div
                 style={{
                   display: 'flex',
@@ -8316,7 +8289,7 @@ Rules:
                   zIndex: 4
                 }}
               >
-                {/* وێنەی پرۆفایلی وەرزشەوان بە چوارچێوەی ئەستوور */}
+                {/* وێنەی پرۆفایلی وەرزشەوان بە چوارچێوەی ئەستوور لە لای چەپ */}
                 <div
                   style={{
                     position: 'relative',
@@ -8325,7 +8298,7 @@ Rules:
                     borderRadius: '50%',
                     background: 'var(--bg-color)',
                     padding: '4px',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -8362,13 +8335,12 @@ Rules:
                     </div>
                   )}
 
-                  {/* نیشانەی سەوزی چالاک (Online Status Dot) */}
+                  {/* نیشانەی سەوزی چالاک (Online Status Indicator) */}
                   <div
                     style={{
                       position: 'absolute',
                       bottom: '2px',
-                      right: isRtl ? 'auto' : '2px',
-                      left: isRtl ? '2px' : 'auto',
+                      right: '2px',
                       width: '16px',
                       height: '16px',
                       borderRadius: '50%',
@@ -8380,7 +8352,7 @@ Rules:
                   />
                 </div>
 
-                {/* دوگمەی هێمای گۆڕینی پرۆفایل (وەک دوگمەی Bookmark لە وێنەی ئاماژەپێکراودا) */}
+                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Bookmark / Edit Action Button on RIGHT) */}
                 <button
                   type="button"
                   onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
@@ -8406,8 +8378,8 @@ Rules:
                 </button>
               </div>
 
-              {/* ناوی وەرزشەوان و ناونیشانی پسپۆڕی/ئامانج */}
-              <div style={{ textAlign: 'start', marginBottom: '14px' }}>
+              {/* ناوی وەرزشەوان و پسپۆڕی بە ئاراستەی چەپ (Athlete Name & Goal Title - Left Aligned) */}
+              <div style={{ textAlign: 'left', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <h2
                     style={{
@@ -8449,17 +8421,18 @@ Rules:
                 </p>
               </div>
 
-              {/* باجەکان (Pill Badges) هاوشێوەی Jitter Expert لە دیزاینەکەی وێنەدا */}
+              {/* باجەکان بە دەستپێکردن لە چەپەوە (Pill Badges - Starting from LEFT) */}
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'flex-start',
                   gap: '8px',
                   flexWrap: 'wrap',
                   marginBottom: '20px'
                 }}
               >
-                {/* باجی براند */}
+                {/* باجی براند وەک Jitter Expert لە وێنەکەدا */}
                 <div
                   style={{
                     display: 'inline-flex',
@@ -8555,7 +8528,7 @@ Rules:
                 )}
               </div>
 
-              {/* داتاکان بە هێڵی دابەشکەری ستوونی (4-Column Metric Grid with Separators) */}
+              {/* داتاکان بە هێڵی دابەشکەری ستوونی لە چەپ بۆ ڕاست (4-Column Metric Grid - LTR) */}
               <div
                 style={{
                   display: 'grid',
@@ -8564,11 +8537,12 @@ Rules:
                   padding: '16px 0',
                   marginBottom: '20px',
                   borderTop: '1px solid var(--border-color)',
-                  borderBottom: '1px solid var(--border-color)'
+                  borderBottom: '1px solid var(--border-color)',
+                  direction: 'ltr'
                 }}
               >
-                {/* 1. کێشی ئێستا (★ Rating style) */}
-                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: isRtl ? 'none' : '1px solid var(--border-color)', borderLeft: isRtl ? '1px solid var(--border-color)' : 'none' }}>
+                {/* 1. کێشی ئێستا (★ Rating style on the left) */}
+                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
                     <span style={{ fontSize: '13px', color: '#F59E0B' }}>★</span>
                     <span>{profile.weight}</span>
@@ -8579,7 +8553,7 @@ Rules:
                 </div>
 
                 {/* 2. کێشی ئامانج */}
-                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: isRtl ? 'none' : '1px solid var(--border-color)', borderLeft: isRtl ? '1px solid var(--border-color)' : 'none' }}>
+                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: '17px', fontWeight: '900', color: '#38BDF8' }}>
                     {profile.targetWeight}
                   </div>
@@ -8589,7 +8563,7 @@ Rules:
                 </div>
 
                 {/* 3. باڵا */}
-                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: isRtl ? 'none' : '1px solid var(--border-color)', borderLeft: isRtl ? '1px solid var(--border-color)' : 'none' }}>
+                <div style={{ textAlign: 'center', padding: '0 4px', borderRight: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>
                     {profile.height}
                   </div>
@@ -8609,7 +8583,7 @@ Rules:
                 </div>
               </div>
 
-              {/* دوگمەی خوارەوە بە تەواوی هاوشێوەی دوگمەی "Get In Touch" بەڵام بەپێی ئەپەکە */}
+              {/* دوگمەی خوارەوە بە تەواوی هاوشێوەی دوگمەی "Get In Touch" (Hero Button) */}
               {authUser ? (
                 <button
                   type="button"
