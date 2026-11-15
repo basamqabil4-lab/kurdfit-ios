@@ -8356,7 +8356,7 @@ Rules:
                   />
                 </div>
 
-                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Standard Uniform Edit Button: White Shape + Blue Icon) */}
+                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Circular Transparent Shape + Blue Icon, No Text) */}
                 <button
                   type="button"
                   onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
@@ -8364,19 +8364,21 @@ Rules:
                     width: '40px',
                     height: '40px',
                     borderRadius: '50%',
-                    background: '#ffffff',
-                    border: '1px solid rgba(0, 0, 0, 0.08)',
+                    background: 'rgba(59, 130, 246, 0.12)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#2563eb',
                     cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+                    boxShadow: '0 2px 10px rgba(37, 99, 235, 0.15)',
                     transition: 'all 0.2s ease',
                     flexShrink: 0
                   }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.22)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)'; }}
                   title={t('editProfile')}
                 >
                   <EditIcon size={18} color="#2563eb" />
@@ -8672,19 +8674,21 @@ Rules:
                     width: '40px',
                     height: '40px',
                     borderRadius: '50%',
-                    background: '#ffffff',
-                    border: '1px solid rgba(0, 0, 0, 0.08)',
+                    background: 'rgba(59, 130, 246, 0.12)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#2563eb',
                     cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+                    boxShadow: '0 2px 10px rgba(37, 99, 235, 0.15)',
                     transition: 'all 0.2s ease',
                     flexShrink: 0
                   }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.22)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)'; }}
                   title={t('change')}
                 >
                   <EditIcon size={18} color="#2563eb" />
@@ -8811,25 +8815,27 @@ Rules:
                 type="button"
                 onClick={() => setShowSupplementsModal(true)}
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid rgba(0, 0, 0, 0.08)',
-                  borderRadius: '12px',
-                  padding: '7px 14px',
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  justifyContent: 'center',
                   color: '#2563eb',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                  transition: 'all 0.2s ease'
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(37, 99, 235, 0.15)',
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
                 }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.03)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.22)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)'; }}
+                title={language === 'en' ? 'Edit' : 'دەستکاری'}
               >
-                <EditIcon size={14} color="#2563eb" />
-                <span style={{ color: '#2563eb', fontWeight: '800' }}>{language === 'en' ? 'Edit' : 'دەستکاری'}</span>
+                <EditIcon size={18} color="#2563eb" />
               </button>
             </div>
 
