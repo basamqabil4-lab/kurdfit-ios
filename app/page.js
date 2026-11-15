@@ -9385,8 +9385,8 @@ Rules:
                       WebkitBackdropFilter: 'blur(10px)',
                       border: '1.5px solid rgba(239, 68, 68, 0.5)',
                       borderRadius: '50%',
-                      width: '40px',
-                      height: '40px',
+                      width: '32px',
+                      height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -9399,7 +9399,7 @@ Rules:
                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     title={t('logout') || "Log Out"}
                   >
-                    <LogOut size={18} />
+                    <LogOut size={13} />
                   </button>
                 ) : (
                   <button
@@ -9411,8 +9411,8 @@ Rules:
                       WebkitBackdropFilter: 'blur(10px)',
                       border: '1px solid rgba(255, 255, 255, 0.2)',
                       borderRadius: '50%',
-                      width: '40px',
-                      height: '40px',
+                      width: '32px',
+                      height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -9425,7 +9425,7 @@ Rules:
                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     title={t('login') || "Sign In"}
                   >
-                    <User size={18} />
+                    <User size={13} />
                   </button>
                 )}
               </div>
@@ -9513,8 +9513,8 @@ Rules:
                   type="button"
                   onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
                   style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '50%',
                     background: 'rgba(255, 255, 255, 0.08)',
                     backdropFilter: 'blur(10px)',
@@ -9533,7 +9533,7 @@ Rules:
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
                   title={t('editProfile')}
                 >
-                  <EditIcon size={18} color="#ffffff" filled={true} />
+                  <EditIcon size={12} color="#ffffff" filled={true} />
                 </button>
               </div>
 
@@ -9823,8 +9823,8 @@ Rules:
                   type="button"
                   onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
                   style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '50%',
                     background: 'rgba(255, 255, 255, 0.08)',
                     backdropFilter: 'blur(10px)',
@@ -9843,7 +9843,7 @@ Rules:
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
                   title={t('change')}
                 >
-                  <EditIcon size={18} color="#ffffff" filled={true} />
+                  <EditIcon size={12} color="#ffffff" filled={true} />
                 </button>
               </div>
             </div>
@@ -9967,8 +9967,8 @@ Rules:
                 type="button"
                 onClick={() => setShowSupplementsModal(true)}
                 style={{
-                  width: '40px',
-                  height: '40px',
+                  width: '32px',
+                  height: '32px',
                   borderRadius: '50%',
                   background: 'rgba(255, 255, 255, 0.08)',
                   backdropFilter: 'blur(10px)',
@@ -9987,7 +9987,7 @@ Rules:
                 onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
                 title={language === 'en' ? 'Edit' : 'دەستکاری'}
               >
-                <EditIcon size={18} color="#ffffff" filled={true} />
+                <EditIcon size={12} color="#ffffff" filled={true} />
               </button>
             </div>
 

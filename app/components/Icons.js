@@ -56,7 +56,7 @@ export function TargetIcon({ size = 22, color = "var(--accent-primary)" }) {
   );
 }
 
-export function EditIcon({ size = 15, color = "#ffffff", filled = true }) {
+export function EditIcon({ size = 13, color = "#ffffff", filled = true }) {
   if (filled) {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: 'inline-block', verticalAlign: 'middle' }}>
