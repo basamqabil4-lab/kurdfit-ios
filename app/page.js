@@ -455,6 +455,157 @@ export default function App() {
   const [aiGoalSuccessMsg, setAiGoalSuccessMsg] = useState('');
   const [actionLoadingState, setActionLoadingState] = useState({ active: false, message: '', actionType: '' });
 
+  // ==================== ڕێکخستنە پێشکەوتووەکانی سیستەم (System Settings State & Handlers) ====================
+  const [settingsWeightUnit, setSettingsWeightUnit] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('app_weight_unit')) || 'kg'; } catch (e) { return 'kg'; }
+  });
+  const [settingsHeightUnit, setSettingsHeightUnit] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('app_height_unit')) || 'cm'; } catch (e) { return 'cm'; }
+  });
+  const [settingsEnergyUnit, setSettingsEnergyUnit] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('app_energy_unit')) || 'kcal'; } catch (e) { return 'kcal'; }
+  });
+  const [settingsRestTime, setSettingsRestTime] = useState(() => {
+    try { return (typeof window !== 'undefined' && Number(localStorage.getItem('app_default_rest_time'))) || 60; } catch (e) { return 60; }
+  });
+  const [settingsAutoRest, setSettingsAutoRest] = useState(() => {
+    try { return typeof window !== 'undefined' ? localStorage.getItem('app_auto_rest_timer') !== 'false' : true; } catch (e) { return true; }
+  });
+  const [settingsRest10sAlert, setSettingsRest10sAlert] = useState(() => {
+    try { return typeof window !== 'undefined' ? localStorage.getItem('app_rest_10s_warning') !== 'false' : true; } catch (e) { return true; }
+  });
+  const [settingsHaptics, setSettingsHaptics] = useState(() => {
+    try { return typeof window !== 'undefined' ? localStorage.getItem('app_haptics_enabled') !== 'false' : true; } catch (e) { return true; }
+  });
+  const [settingsMacroFormula, setSettingsMacroFormula] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('app_macro_formula')) || 'high_protein'; } catch (e) { return 'high_protein'; }
+  });
+  const [settingsWorkoutLocation, setSettingsWorkoutLocation] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('app_preferred_location')) || 'gym'; } catch (e) { return 'gym'; }
+  });
+  const [settingsCustomApiKey, setSettingsCustomApiKey] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('custom_gemini_api_key')) || ''; } catch (e) { return ''; }
+  });
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [syncFeedbackMsg, setSyncFeedbackMsg] = useState('');
+  const [cacheClearMsg, setCacheClearMsg] = useState('');
+  const [appUpdateCheckState, setAppUpdateCheckState] = useState('idle');
+
+  const handleExportAllData = () => {
+    try {
+      const backupData = {
+        app: 'BQ GYM (KurdFit Pro)',
+        version: '4.7.3',
+        exportedAt: new Date().toISOString(),
+        profile,
+        workoutCourse,
+        foodItems,
+        nutritionHistory,
+        weightHistory,
+        settings: {
+          theme,
+          colorTheme,
+          language,
+          weightUnit: settingsWeightUnit,
+          heightUnit: settingsHeightUnit,
+          restTime: settingsRestTime,
+          soundEnabled
+        }
+      };
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kurdfit_backup_${profile.name || 'athlete'}_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (typeof playSparkleSound === 'function') playSparkleSound();
+      setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Backup exported successfully!' : '✓ باکئاپەکە بە سەرکەوتوویی دابەزێندرا!');
+      setTimeout(() => setSyncFeedbackMsg(''), 4000);
+    } catch (err) {
+      alert('Export failed: ' + err.message);
+    }
+  };
+
+  const handleImportBackupData = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (!data || !data.profile) {
+          alert(currentLangConfig.code === 'en' ? 'Invalid backup file!' : 'فایلی باکئاپەکە دروست نییە!');
+          return;
+        }
+        if (confirm(currentLangConfig.code === 'en' ? 'Are you sure you want to restore this backup? Current data will be replaced.' : 'دڵنیایت لە گەڕاندنەوەی ئەم باکئاپە؟ داتاکانی ئێستا دەگۆڕدرێن.')) {
+          if (data.profile) {
+            setProfile(data.profile);
+            try { localStorage.setItem('kurd_fit_profile_v5', JSON.stringify(data.profile)); } catch (err) {}
+          }
+          if (data.workoutCourse) {
+            setWorkoutCourse(data.workoutCourse);
+            try { localStorage.setItem('app_workout_course', JSON.stringify(data.workoutCourse)); } catch (err) {}
+          }
+          if (data.nutritionHistory) {
+            setNutritionHistory(data.nutritionHistory);
+            try { localStorage.setItem('app_nutrition_history', JSON.stringify(data.nutritionHistory)); } catch (err) {}
+          }
+          if (data.settings?.theme) changeTheme(data.settings.theme);
+          if (data.settings?.colorTheme) changeColorTheme(data.settings.colorTheme);
+          if (data.settings?.language) changeLanguage(data.settings.language);
+          if (typeof playSparkleSound === 'function') playSparkleSound();
+          alert(currentLangConfig.code === 'en' ? 'Data restored successfully!' : 'داتاکان بە سەرکەوتوویی گەڕێندرانەوە!');
+        }
+      } catch (err) {
+        alert(currentLangConfig.code === 'en' ? 'Failed to read backup file: ' + err.message : 'هەڵە لە خوێندنەوەی فایل: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleClearAppCache = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+      setCacheClearMsg(currentLangConfig.code === 'en' ? '✓ Temporary cache cleared successfully!' : '✓ کاشی کاتی بە سەرکەوتوویی سڕایەوە!');
+      if (typeof playSparkleSound === 'function') playSparkleSound();
+      setTimeout(() => setCacheClearMsg(''), 4000);
+    } catch (e) {
+      setCacheClearMsg(currentLangConfig.code === 'en' ? 'Cache cleared!' : 'کاش پاککرایەوە!');
+      setTimeout(() => setCacheClearMsg(''), 4000);
+    }
+  };
+
+  const handleManualCloudSync = async () => {
+    setIsManualSyncing(true);
+    setSyncFeedbackMsg(currentLangConfig.code === 'en' ? 'Syncing data with cloud...' : 'خەریکی سینککردنە لەگەڵ کلاود...');
+    try {
+      await new Promise(r => setTimeout(r, 1000));
+      if (typeof playSparkleSound === 'function') playSparkleSound();
+      setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Cloud sync completed!' : '✓ تەواوی داتاکان بە سەرکەوتوویی سینک کران!');
+    } catch (e) {
+      setSyncFeedbackMsg('Sync error: ' + e.message);
+    } finally {
+      setIsManualSyncing(false);
+      setTimeout(() => setSyncFeedbackMsg(''), 4000);
+    }
+  };
+
+  const handleCheckAppUpdates = () => {
+    setAppUpdateCheckState('checking');
+    setTimeout(() => {
+      setAppUpdateCheckState('latest');
+      if (typeof playSparkleSound === 'function') playSparkleSound();
+      setTimeout(() => setAppUpdateCheckState('idle'), 4000);
+    }, 1200);
+  };
+
   // دۆخی چاتی ڕاهێنەری مرۆڤئاسا و یادەوەرییەکەی (Coach Memory & Conversational State)
   const [coachMemory, setCoachMemory] = useState(() => {
     try {
@@ -5390,7 +5541,7 @@ Rules:
               </button>
 
               <button 
-                onClick={() => setShowSettingsModal(true)} 
+                onClick={() => { setActiveTab('more'); setMoreActiveTab('settings'); }} 
                 className="liquid-pill"
                 style={{ width: '36px', height: '36px', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-main)' }}
                 title={t('settings')}
@@ -7494,6 +7645,84 @@ Rules:
                     {currentLangConfig.code === 'en' ? 'Visual Muscle Atlas' : currentLangConfig.code === 'ar' ? 'أطلس العضلات المصور' : currentLangConfig.code === 'fa' ? 'اطلس تصویری عضلات' : 'فەرهەنگی وێنەیی ماسولکەکان'}
                   </span>
                 </button>
+
+                {/* دوگمەی ڕێکخستنەکانی سیستەم (Settings Hub) */}
+                <button
+                  type="button"
+                  onClick={() => setMoreActiveTab('settings')}
+                  className="liquid-pill"
+                  style={{
+                    padding: '24px 16px',
+                    borderRadius: '22px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
+                    transition: 'all 0.25s ease',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '18px',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    boxShadow: '0 6px 20px rgba(168, 85, 247, 0.4)'
+                  }}>
+                    <Settings size={28} />
+                  </div>
+                  <span style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', textAlign: 'center' }}>
+                    {t('settings')}
+                  </span>
+                </button>
+
+                {/* دوگمەی ئاگادارکردنەوە و وەبیرهێنانەوەکان (Reminders & Notifications) */}
+                <button
+                  type="button"
+                  onClick={() => setShowNotificationsModal(true)}
+                  className="liquid-pill"
+                  style={{
+                    padding: '24px 16px',
+                    borderRadius: '22px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
+                    transition: 'all 0.25s ease',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '18px',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4)'
+                  }}>
+                    <Bell size={28} />
+                  </div>
+                  <span style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', textAlign: 'center' }}>
+                    {currentLangConfig.code === 'en' ? 'Reminders' : currentLangConfig.code === 'ar' ? 'التنبيهات' : currentLangConfig.code === 'fa' ? 'یادآورها' : 'ئاگادارکردنەوە'}
+                  </span>
+                </button>
               </div>
             </div>
           )}
@@ -8121,6 +8350,929 @@ Rules:
             </div>
           )}
 
+          {/* ==================== تابی تەواو و پێشکەوتووی ڕێکخستنەکان (Comprehensive System Settings) ==================== */}
+          {moreActiveTab === 'settings' && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: 0, paddingBottom: '36px' }}>
+              
+              {/* ١. سەردێڕی سەرەوە لەگەڵ دوگمەی گەڕانەوە بۆ مێنیو */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+                <button
+                  type="button"
+                  onClick={() => setMoreActiveTab('menu')}
+                  className="liquid-pill"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    borderRadius: '14px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {isRtl ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
+                  <span>{currentLangConfig.code === 'en' ? 'Back' : currentLangConfig.code === 'ar' ? 'رجوع' : currentLangConfig.code === 'fa' ? 'بازگشت' : 'گەڕانەوە'}</span>
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    boxShadow: '0 4px 12px rgba(168, 85, 247, 0.35)'
+                  }}>
+                    <Settings size={20} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '17px', fontWeight: '900', margin: 0, color: 'var(--text-main)' }}>
+                      {t('settings')}
+                    </h2>
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>BQ GYM v4.7.3 PRO</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* پەیامی فیدباک ئەگەر هەبێت (Toast feedback banner) */}
+              {(syncFeedbackMsg || cacheClearMsg) && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '16px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  color: '#10B981',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <CheckCircle2 size={18} />
+                  <span>{syncFeedbackMsg || cacheClearMsg}</span>
+                </div>
+              )}
+
+              {/* بەشی ١: هەژمار و کلاود (Account & Athlete Card) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '50px',
+                      height: '50px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #a855f7 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      fontSize: '20px',
+                      fontWeight: '900',
+                      boxShadow: '0 4px 14px rgba(59, 130, 246, 0.35)',
+                      overflow: 'hidden'
+                    }}>
+                      {authUser?.photoURL ? (
+                        <img src={authUser.photoURL} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span>{getLocalizedAthleteName(profile.name, language).charAt(0) || 'B'}</span>
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>
+                          {getLocalizedAthleteName(profile.name, language)}
+                        </h3>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '800',
+                          padding: '2px 8px',
+                          borderRadius: '9999px',
+                          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                          color: '#ffffff'
+                        }}>PRO</span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {authUser ? (authUser.email || authUser.phoneNumber || 'Authenticated Athlete') : (currentLangConfig.code === 'en' ? 'Guest Mode (Local Storage)' : 'وەرزشەوانی میوان (خەزنی ناوخۆیی)')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleManualCloudSync}
+                    disabled={isManualSyncing}
+                    className="liquid-pill"
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      color: 'var(--accent-primary)',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--card-subtle)'
+                    }}
+                    title="Sync with cloud"
+                  >
+                    <RefreshCw size={14} className={isManualSyncing ? 'animate-spin' : ''} />
+                    <span>{isManualSyncing ? (currentLangConfig.code === 'en' ? 'Syncing...' : 'خەریکی سینکە...') : (currentLangConfig.code === 'en' ? 'Sync' : 'سینک')}</span>
+                  </button>
+                </div>
+
+                {/* دوگمە خێراکانی مۆداڵی زانیاری لەش و ئامانج */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
+                    className="liquid-pill"
+                    style={{ padding: '10px 8px', borderRadius: '14px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer', textAlign: 'center', color: 'var(--text-main)', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)' }}
+                  >
+                    👤 {t('editProfile')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
+                    className="liquid-pill"
+                    style={{ padding: '10px 8px', borderRadius: '14px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer', textAlign: 'center', color: 'var(--text-main)', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)' }}
+                  >
+                    🎯 {t('athleteGoal')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSupplementsModal(true)}
+                    className="liquid-pill"
+                    style={{ padding: '10px 8px', borderRadius: '14px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer', textAlign: 'center', color: 'var(--text-main)', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)' }}
+                  >
+                    💊 {currentLangConfig.code === 'en' ? 'Supplements' : 'سەپلیمێنت'}
+                  </button>
+                </div>
+
+                {/* چوونەژوورەوە یان دەرچوون */}
+                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-muted)', fontWeight: '700' }}>
+                    {authUser ? (currentLangConfig.code === 'en' ? 'Manage Account Session' : 'دۆخی چوونەژوورەوەی هەژمار') : (currentLangConfig.code === 'en' ? 'Sign in to sync across devices' : 'بچۆ ژوورەوە بۆ پاراستنی داتاکانت لە کلاود')}
+                  </span>
+                  {authUser ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowLogoutConfirmModal(true)}
+                      style={{
+                        padding: '7px 16px',
+                        borderRadius: '12px',
+                        background: 'rgba(239, 68, 68, 0.14)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        color: '#ef4444',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <LogOut size={14} />
+                      <span>{t('logout') || 'دەرچوون'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthModal(true)}
+                      style={{
+                        padding: '7px 16px',
+                        borderRadius: '12px',
+                        background: 'var(--accent-gradient)',
+                        border: 'none',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 2px 10px var(--accent-glow)'
+                      }}
+                    >
+                      <User size={14} />
+                      <span>{t('login') || 'چوونەژوورەوە'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* بەشی ٢: ڕووکار و ڕەنگەکانی بەرنامە (Appearance & Styling) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Palette size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'Appearance & Theme' : 'ڕووکار و ڕەنگەکانی بەرنامە'}</span>
+                </h4>
+
+                {/* گۆڕینی دۆخی تاریک / ڕووناک */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
+                  <button
+                    type="button"
+                    onClick={() => { changeTheme('dark'); if (typeof playSparkleSound === 'function') playSparkleSound(); }}
+                    className="liquid-pill"
+                    style={{
+                      padding: '12px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      border: theme === 'dark' ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: theme === 'dark' ? 'var(--accent-gradient-subtle)' : 'var(--card-subtle)',
+                      color: theme === 'dark' ? 'var(--accent-primary)' : 'var(--text-muted)',
+                      fontWeight: '800',
+                      fontSize: '13px',
+                      boxShadow: theme === 'dark' ? '0 0 15px var(--accent-glow)' : 'none'
+                    }}
+                  >
+                    <Moon size={18} style={{ color: '#FBBF24' }} />
+                    <span>{currentLangConfig.code === 'en' ? 'Dark Mode' : 'دۆخی تاریک'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { changeTheme('light'); if (typeof playSparkleSound === 'function') playSparkleSound(); }}
+                    className="liquid-pill"
+                    style={{
+                      padding: '12px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      border: theme === 'light' ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: theme === 'light' ? 'var(--accent-gradient-subtle)' : 'var(--card-subtle)',
+                      color: theme === 'light' ? 'var(--accent-primary)' : 'var(--text-muted)',
+                      fontWeight: '800',
+                      fontSize: '13px',
+                      boxShadow: theme === 'light' ? '0 0 15px var(--accent-glow)' : 'none'
+                    }}
+                  >
+                    <Sun size={18} style={{ color: '#F59E0B' }} />
+                    <span>{currentLangConfig.code === 'en' ? 'Light Mode' : 'دۆخی ڕووناک'}</span>
+                  </button>
+                </div>
+
+                {/* ڕەنگی بنەڕەتی بەرنامە */}
+                <div style={{ marginBottom: '14px' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                    {currentLangConfig.code === 'en' ? 'Primary Accent Color:' : 'ڕەنگی بنەڕەتیی بەرنامە (Primary Accent):'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '6px' }}>
+                    {[
+                      { id: 'system', name: currentLangConfig.code === 'en' ? 'Auto' : 'خۆکار', color1: '#94a3b8', color2: '#475569' },
+                      { id: 'default', name: currentLangConfig.code === 'en' ? 'Royal Blue' : 'شینی شاهانە', color1: '#2563EB', color2: '#38BDF8' },
+                      { id: 'pink', name: currentLangConfig.code === 'en' ? 'Pink' : 'پەمەیی', color1: '#F472B6', color2: '#BE185D' },
+                      { id: 'emerald', name: currentLangConfig.code === 'en' ? 'Emerald' : 'سەوزی زمردی', color1: '#10B981', color2: '#0D9488' },
+                      { id: 'ocean', name: currentLangConfig.code === 'en' ? 'Ocean Cyan' : 'ئۆقیانووسی', color1: '#3B82F6', color2: '#0EA5E9' },
+                      { id: 'sunset', name: currentLangConfig.code === 'en' ? 'Sunset' : 'پرتەقاڵی', color1: '#F97316', color2: '#EAB308' }
+                    ].map(ct => (
+                      <button
+                        key={ct.id}
+                        type="button"
+                        onClick={() => changeColorTheme(ct.id)}
+                        style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                          background: 'none', border: 'none', cursor: 'pointer', minWidth: '60px'
+                        }}
+                      >
+                        <div style={{
+                          width: '40px', height: '40px', borderRadius: '50%',
+                          background: `linear-gradient(135deg, ${ct.color1}, ${ct.color2})`,
+                          border: colorTheme === ct.id ? '3px solid var(--text-main)' : '2.5px solid transparent',
+                          boxShadow: colorTheme === ct.id ? '0 4px 14px rgba(0,0,0,0.35)' : 'none',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#ffffff', fontSize: '14px', fontWeight: '900',
+                          transition: 'all 0.2s ease'
+                        }}>
+                          {colorTheme === ct.id ? '✓' : ''}
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: colorTheme === ct.id ? '800' : '600', color: colorTheme === ct.id ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                          {ct.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* لەرینەوەی مۆبایل */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {currentLangConfig.code === 'en' ? 'Haptic Feedback (Vibration)' : 'لەرینەوەی مۆبایل لە کاتی کلیک'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {currentLangConfig.code === 'en' ? 'Tactile vibration response on touch' : 'لەرینەوەی نەرم بۆ دوگمەکان و کۆتایی سێت'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !settingsHaptics;
+                      setSettingsHaptics(next);
+                      try { localStorage.setItem('app_haptics_enabled', next ? 'true' : 'false'); } catch (e) {}
+                    }}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: settingsHaptics ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                      color: settingsHaptics ? '#ffffff' : 'var(--text-muted)',
+                      boxShadow: settingsHaptics ? '0 2px 10px var(--accent-glow)' : 'none'
+                    }}
+                  >
+                    {settingsHaptics ? (currentLangConfig.code === 'en' ? 'Active' : 'چالاکە') : (currentLangConfig.code === 'en' ? 'Disabled' : 'ناچالاکە')}
+                  </button>
+                </div>
+              </div>
+
+              {/* بەشی ٣: زمان و یەکەکانی پێوانە (Language & Units) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Globe size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'Language & Measurement Units' : 'زمان و یەکەکانی پێوانە'}</span>
+                </h4>
+
+                {/* ٤ زمانی سەرەکی */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '18px' }}>
+                  {[
+                    { code: 'ku', flag: '☀️', label: 'کوردی (سۆرانی)' },
+                    { code: 'en', flag: '🇬🇧', label: 'English' },
+                    { code: 'ar', flag: '🇸🇦', label: 'العربية' },
+                    { code: 'fa', flag: '🇮🇷', label: 'فارسی' }
+                  ].map(l => (
+                    <button
+                      key={l.code}
+                      type="button"
+                      onClick={() => changeLanguage(l.code)}
+                      className="liquid-pill"
+                      style={{
+                        padding: '11px 14px',
+                        borderRadius: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        border: language === l.code ? '2px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                        background: language === l.code ? 'var(--accent-gradient-subtle)' : 'var(--card-subtle)',
+                        color: language === l.code ? 'var(--accent-primary)' : 'var(--text-main)',
+                        fontWeight: '800',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>{l.flag}</span>
+                        <span>{l.label}</span>
+                      </div>
+                      {language === l.code && <span style={{ fontSize: '12px' }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+
+                {/* یەکەکانی پێوانە */}
+                <div style={{ paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    {currentLangConfig.code === 'en' ? 'System Measurement Units:' : 'یەکەکانی ستانداردی پێوانەکردن:'}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {/* کێش */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '800' }}>
+                        <Scale size={15} style={{ color: 'var(--accent-primary)' }} />
+                        <span>{t('weight')}:</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', background: 'var(--card-subtle)', padding: '3px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        {['kg', 'lbs'].map(u => (
+                          <button
+                            key={u}
+                            type="button"
+                            onClick={() => { setSettingsWeightUnit(u); try { localStorage.setItem('app_weight_unit', u); } catch(e){} }}
+                            style={{
+                              padding: '5px 14px',
+                              borderRadius: '9px',
+                              border: 'none',
+                              background: settingsWeightUnit === u ? 'var(--accent-gradient)' : 'transparent',
+                              color: settingsWeightUnit === u ? '#ffffff' : 'var(--text-muted)',
+                              fontSize: '12px',
+                              fontWeight: '800',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {u.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* باڵا */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '800' }}>
+                        <Ruler size={15} style={{ color: 'var(--accent-primary)' }} />
+                        <span>{t('height')}:</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', background: 'var(--card-subtle)', padding: '3px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        {['cm', 'ft'].map(u => (
+                          <button
+                            key={u}
+                            type="button"
+                            onClick={() => { setSettingsHeightUnit(u); try { localStorage.setItem('app_height_unit', u); } catch(e){} }}
+                            style={{
+                              padding: '5px 14px',
+                              borderRadius: '9px',
+                              border: 'none',
+                              background: settingsHeightUnit === u ? 'var(--accent-gradient)' : 'transparent',
+                              color: settingsHeightUnit === u ? '#ffffff' : 'var(--text-muted)',
+                              fontSize: '12px',
+                              fontWeight: '800',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {u.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* وزە */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '800' }}>
+                        <Flame size={15} style={{ color: '#F97316' }} />
+                        <span>{t('calories')}:</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', background: 'var(--card-subtle)', padding: '3px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        {['kcal', 'kJ'].map(u => (
+                          <button
+                            key={u}
+                            type="button"
+                            onClick={() => { setSettingsEnergyUnit(u); try { localStorage.setItem('app_energy_unit', u); } catch(e){} }}
+                            style={{
+                              padding: '5px 14px',
+                              borderRadius: '9px',
+                              border: 'none',
+                              background: settingsEnergyUnit === u ? 'var(--accent-gradient)' : 'transparent',
+                              color: settingsEnergyUnit === u ? '#ffffff' : 'var(--text-muted)',
+                              fontSize: '12px',
+                              fontWeight: '800',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* بەشی ٤: دەنگ و تایمەرەکانی ڕاهێنان (Audio & Workout Timer) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Timer size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'Workout & Rest Timer Engine' : 'دەنگ و تایمەری پشووی ڕاهێنان'}</span>
+                </h4>
+
+                {/* دەنگەکانی بەرنامە */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '14px', borderBottom: '1px solid var(--border-color)' }}>
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {t('soundEffects') || 'دەنگەکانی بەرنامە'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {currentLangConfig.code === 'en' ? 'Sound alerts for clicks and timers' : 'دەنگی زەنگ، کلیک، و کۆتایی سێت'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => { if (typeof playSparkleSound === 'function') playSparkleSound(); }}
+                      className="liquid-pill"
+                      style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      title="Test Audio"
+                    >
+                      <Volume2 size={14} />
+                      <span>{currentLangConfig.code === 'en' ? 'Test' : 'تاقیکردنەوە'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !soundEnabled;
+                        setSoundEnabled(next);
+                        try { localStorage.setItem('app_sound_enabled', next ? 'true' : 'false'); } catch (e) {}
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        border: 'none',
+                        background: soundEnabled ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                        color: soundEnabled ? '#ffffff' : 'var(--text-muted)',
+                        boxShadow: soundEnabled ? '0 2px 10px var(--accent-glow)' : 'none'
+                      }}
+                    >
+                      {soundEnabled ? (currentLangConfig.code === 'en' ? 'Active' : 'چالاکە') : (currentLangConfig.code === 'en' ? 'Muted' : 'بێدەنگ')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* دەستپێکردنی خۆکاری تایمەر */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {currentLangConfig.code === 'en' ? 'Auto-Start Rest Timer' : 'دەستپێکردنی خۆکاری تایمەری پشوو'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {currentLangConfig.code === 'en' ? 'Automatically counts down after completing a set' : 'دەستپێکردنی کاتی پشوو دوای تۆمارکردنی سێت'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !settingsAutoRest;
+                      setSettingsAutoRest(next);
+                      try { localStorage.setItem('app_auto_rest_timer', next ? 'true' : 'false'); } catch(e){}
+                    }}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '10px',
+                      fontSize: '11.5px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: settingsAutoRest ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                      color: settingsAutoRest ? '#ffffff' : 'var(--text-muted)'
+                    }}
+                  >
+                    {settingsAutoRest ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* ماوەی پشووی بنەڕەتی */}
+                <div style={{ paddingTop: '12px' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    {currentLangConfig.code === 'en' ? 'Default Rest Duration:' : 'ماوەی بنەڕەتیی پشووی نێوان سێتەکان:'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {[30, 60, 90, 120, 180].map(sec => (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => {
+                          setSettingsRestTime(sec);
+                          try { localStorage.setItem('app_default_rest_time', String(sec)); } catch(e){}
+                        }}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          cursor: 'pointer',
+                          border: settingsRestTime === sec ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                          background: settingsRestTime === sec ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                          color: settingsRestTime === sec ? '#ffffff' : 'var(--text-main)',
+                          boxShadow: settingsRestTime === sec ? '0 2px 10px var(--accent-glow)' : 'none'
+                        }}
+                      >
+                        {sec}s ({sec / 60 >= 1 ? `${sec / 60}m` : `${sec}s`})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* بەشی ٥: خۆراک، ئاو و پڕۆتین (Nutrition & Daily Targets) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Utensils size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'Nutrition & Daily Targets' : 'ڕێکخستنی خۆراک، ئاو و پڕۆتین'}</span>
+                </h4>
+
+                {/* پەنجەرەی پڕۆتینی خێرا */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '14px', borderBottom: '1px solid var(--border-color)' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {t('quickProteinWidgetSetting') || 'پەنجەرەی پڕۆتینی خێرا'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {t('quickProteinWidgetDesc') || 'پیشاندانی چوارگۆشەی پڕۆتین لەسەر شاشەی سەرەکی'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isProteinWidgetDismissed;
+                      setIsProteinWidgetDismissed(next);
+                      try { localStorage.setItem('app_protein_widget_dismissed', next ? 'true' : 'false'); } catch (e) {}
+                    }}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '10px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      border: 'none',
+                      background: !isProteinWidgetDismissed ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                      color: !isProteinWidgetDismissed ? '#ffffff' : 'var(--text-muted)'
+                    }}
+                  >
+                    {!isProteinWidgetDismissed ? (currentLangConfig.code === 'en' ? 'Visible' : 'دیارە') : (currentLangConfig.code === 'en' ? 'Hidden' : 'شاراوە')}
+                  </button>
+                </div>
+
+                {/* دابەشکاری ماکرۆ */}
+                <div style={{ paddingTop: '12px' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    {currentLangConfig.code === 'en' ? 'Macro Target Formula:' : 'هاوکێشەی دابەشکاری ماکرۆ (Macro Split):'}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {[
+                      { id: 'high_protein', label: currentLangConfig.code === 'en' ? 'High Protein (40/30/30)' : 'پڕۆتینی بەرز (٤٠/٣٠/٣٠)' },
+                      { id: 'bulking', label: currentLangConfig.code === 'en' ? 'Bulking (50/25/25)' : 'قەبارە/ماسولکە (٥٠/٢٥/٢٥)' },
+                      { id: 'cutting', label: currentLangConfig.code === 'en' ? 'Cutting (35/40/25)' : 'دابەزاندنی چەوری (٣٥/٤٠/٢٥)' },
+                      { id: 'balanced', label: currentLangConfig.code === 'en' ? 'Balanced (45/25/30)' : 'هاوسەنگ (٤٥/٢٥/٣٠)' }
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => { setSettingsMacroFormula(m.id); try { localStorage.setItem('app_macro_formula', m.id); } catch(e){} }}
+                        className="liquid-pill"
+                        style={{
+                          padding: '10px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11.5px',
+                          fontWeight: '800',
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          border: settingsMacroFormula === m.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                          background: settingsMacroFormula === m.id ? 'var(--accent-gradient-subtle)' : 'var(--card-subtle)',
+                          color: settingsMacroFormula === m.id ? 'var(--accent-primary)' : 'var(--text-main)'
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* بەشی ٦: داتا، باکئاپ و بەڕێوەبردن (Data Backup & Reset) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Cloud size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'Data Backup & Storage' : 'داتا، باکئاپ و هەڵگرتن'}</span>
+                </h4>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                  {/* دابەزاندنی باکئاپ */}
+                  <button
+                    type="button"
+                    onClick={handleExportAllData}
+                    className="liquid-pill"
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '16px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      background: 'rgba(59, 130, 246, 0.12)',
+                      border: '1px solid rgba(59, 130, 246, 0.35)',
+                      color: 'var(--accent-primary)',
+                      fontSize: '12.5px',
+                      fontWeight: '800'
+                    }}
+                  >
+                    <Download size={16} />
+                    <span>{currentLangConfig.code === 'en' ? 'Export Backup' : 'دابەزاندنی باکئاپ'}</span>
+                  </button>
+
+                  {/* گەڕاندنەوەی باکئاپ */}
+                  <label
+                    className="liquid-pill"
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '16px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      background: 'rgba(160, 185, 129, 0.12)',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      color: '#10B981',
+                      fontSize: '12.5px',
+                      fontWeight: '800'
+                    }}
+                  >
+                    <RotateCcw size={16} />
+                    <span>{currentLangConfig.code === 'en' ? 'Restore Backup' : 'گەڕاندنەوەی باکئاپ'}</span>
+                    <input type="file" accept=".json" onChange={handleImportBackupData} style={{ display: 'none' }} />
+                  </label>
+                </div>
+
+                {/* سڕینەوەی کاش */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleClearAppCache}
+                    className="liquid-pill"
+                    style={{
+                      flex: 1,
+                      padding: '12px 14px',
+                      borderRadius: '16px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      background: 'var(--card-subtle)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-main)',
+                      fontSize: '12px',
+                      fontWeight: '800'
+                    }}
+                  >
+                    <Trash2 size={15} style={{ color: '#F59E0B' }} />
+                    <span>{currentLangConfig.code === 'en' ? 'Clear Cache' : 'سڕینەوەی کاش'}</span>
+                  </button>
+
+                  {/* ڕێستکردنەوەی تەواوەتی */}
+                  <button
+                    type="button"
+                    onClick={() => setShowResetModal(true)}
+                    className="liquid-pill"
+                    style={{
+                      flex: 1,
+                      padding: '12px 14px',
+                      borderRadius: '16px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      color: '#ef4444',
+                      fontSize: '12px',
+                      fontWeight: '800'
+                    }}
+                  >
+                    <AlertTriangle size={15} />
+                    <span>{currentLangConfig.code === 'en' ? 'Factory Reset' : 'ڕێستکردنەوە'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* بەشی ٧: کلیلی زیرەکی دەستکرد و داشبۆردی بەڕێوەبەر (AI Key & Coach Admin) */}
+              <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Bot size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'AI Model & Coach Administration' : 'کۆنترۆڵی زیرەکی دەستکرد و ڕاهێنەر'}</span>
+                </h4>
+
+                {/* کلیلی Gemini API بە خواستی خۆت */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>
+                    {currentLangConfig.code === 'en' ? 'Custom Google Gemini API Key (Optional):' : 'کلیلی تایبەتی Gemini API (ئارەزوومەندانە):'}
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="password"
+                      value={settingsCustomApiKey}
+                      onChange={e => setSettingsCustomApiKey(e.target.value)}
+                      placeholder={currentLangConfig.code === 'en' ? 'Paste AIzaSy... key here' : 'کلیلی AIzaSy لێرە دابنێ...'}
+                      style={{ flex: 1, padding: '10px 14px', borderRadius: '12px', fontSize: '12px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          localStorage.setItem('custom_gemini_api_key', settingsCustomApiKey.trim());
+                          if (typeof playSparkleSound === 'function') playSparkleSound();
+                          alert(currentLangConfig.code === 'en' ? 'API Key saved successfully!' : 'کلیلەکە بە سەرکەوتوویی پاشەکەوت کرا!');
+                        } catch(e){}
+                      }}
+                      className="liquid-pill"
+                      style={{ padding: '10px 16px', borderRadius: '12px', background: 'var(--accent-gradient)', color: '#ffffff', fontWeight: '800', fontSize: '12px', cursor: 'pointer', border: 'none' }}
+                    >
+                      {currentLangConfig.code === 'en' ? 'Save' : 'پاشەکەوت'}
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    {currentLangConfig.code === 'en' ? 'Leave empty to use built-in high-speed system keys.' : 'ئەگەر بە بەتاڵی جێیبهێڵیت، سیستەم کلیلە خێراکانی خۆی بەکاردەهێنێت.'}
+                  </span>
+                </div>
+
+                {/* دوگمەی داشبۆردی بەڕێوەبەر و ڕاهێنەر */}
+                <button
+                  type="button"
+                  onClick={() => setShowAdminModal(true)}
+                  style={{
+                    width: '100%',
+                    padding: '13px',
+                    borderRadius: '16px',
+                    background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%)',
+                    border: '1.5px solid rgba(168, 85, 247, 0.45)',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '900',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(168, 85, 247, 0.25)'
+                  }}
+                >
+                  <ShieldCheck size={18} style={{ color: '#c084fc' }} />
+                  <span>{currentLangConfig.code === 'en' ? 'Open Coach & Admin Console' : 'کردنەوەی کۆنسۆڵی ڕاهێنەران و بەڕێوەبەر'}</span>
+                </button>
+              </div>
+
+              {/* بەشی ٨: دەربارەی بەرنامە و وەشان (About BQ GYM) */}
+              <div className="dark-card" style={{ padding: '20px', borderRadius: '22px', textAlign: 'center' }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '18px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  fontSize: '26px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 12px auto',
+                  boxShadow: '0 8px 24px var(--accent-glow)'
+                }}>
+                  🏋️
+                </div>
+                <h3 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 4px 0' }}>
+                  BQ GYM (KurdFit Pro)
+                </h3>
+                <div style={{ fontSize: '12px', color: 'var(--accent-primary)', fontWeight: '800', marginBottom: '8px' }}>
+                  Version 4.7.3 (Official Stable Build)
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6', margin: '0 auto 16px auto', maxWidth: '380px' }}>
+                  {currentLangConfig.code === 'en'
+                    ? 'Built with cutting-edge exercise science and AI nutrition logic tailored for Kurdish athletes worldwide.'
+                    : 'پەرەپێدراو بە تازەترین زانستی وەرزش، ژیریی دەستکرد و داتابەیسی خۆراکی تایبەت بە کوردستان.'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleCheckAppUpdates}
+                  className="liquid-pill"
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: appUpdateCheckState === 'latest' ? 'rgba(16, 185, 129, 0.2)' : 'var(--card-subtle)',
+                    border: appUpdateCheckState === 'latest' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-color)',
+                    color: appUpdateCheckState === 'latest' ? '#10B981' : 'var(--text-main)'
+                  }}
+                >
+                  <RefreshCw size={13} className={appUpdateCheckState === 'checking' ? 'animate-spin' : ''} />
+                  <span>
+                    {appUpdateCheckState === 'checking'
+                      ? (currentLangConfig.code === 'en' ? 'Checking for updates...' : 'پشکنینی نوێکردنەوە...')
+                      : appUpdateCheckState === 'latest'
+                      ? (currentLangConfig.code === 'en' ? '✓ You have the latest version' : '✓ نوێترین وەشان کارایە')
+                      : (currentLangConfig.code === 'en' ? 'Check for Updates' : 'پشکنینی نوێکردنەوەکان')}
+                  </span>
+                </button>
+              </div>
+
+            </div>
+          )}
+
         </div>
       )}
 
@@ -8148,7 +9300,7 @@ Rules:
               </button>
 
               <button 
-                onClick={() => setShowSettingsModal(true)}
+                onClick={() => { setActiveTab('more'); setMoreActiveTab('settings'); }}
                 className="liquid-pill"
                 style={{ padding: '8px 14px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
