@@ -491,7 +491,41 @@ export default function App() {
   const [cacheClearMsg, setCacheClearMsg] = useState('');
   const [appUpdateCheckState, setAppUpdateCheckState] = useState('idle');
 
-  const handleExportAllData = () => {
+  const triggerHapticFeedback = (pattern = 18) => {
+    if (!settingsHaptics || typeof navigator === 'undefined') return;
+    try {
+      if (typeof navigator.vibrate === 'function') {
+        navigator.vibrate(pattern);
+      }
+    } catch (e) {}
+  };
+
+  const applyMacroFormulaSetting = (formulaId) => {
+    const splits = {
+      high_protein: { c: 0.40, p: 0.30, f: 0.30 },
+      bulking: { c: 0.50, p: 0.25, f: 0.25 },
+      cutting: { c: 0.35, p: 0.40, f: 0.25 },
+      balanced: { c: 0.45, p: 0.25, f: 0.30 }
+    };
+    const ratio = splits[formulaId] || splits.balanced;
+    setSettingsMacroFormula(formulaId);
+    try { localStorage.setItem('app_macro_formula', formulaId); } catch (e) {}
+    setProfile(prev => {
+      const cals = Number(prev?.goalCalories) || 2200;
+      const updated = {
+        ...prev,
+        goalCarbs: Math.max(50, Math.round((cals * ratio.c) / 4)),
+        goalProtein: Math.max(50, Math.round((cals * ratio.p) / 4)),
+        goalFat: Math.max(25, Math.round((cals * ratio.f) / 9))
+      };
+      try { localStorage.setItem('app_profile', JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+    triggerHapticFeedback(15);
+    if (typeof playSparkleSound === 'function') playSparkleSound();
+  };
+
+  const handleExportAllData = async () => {
     try {
       const backupData = {
         app: 'BQ GYM (KurdFit Pro)',
@@ -499,33 +533,76 @@ export default function App() {
         exportedAt: new Date().toISOString(),
         profile,
         workoutCourse,
-        foodItems,
-        nutritionHistory,
-        weightHistory,
+        courseHistory,
+        dietMeals,
+        exerciseLogs,
+        waterMl,
+        completedDayIndices,
+        aiCustomFoods,
+        coachMemory,
+        chatMessages,
+        lastUsedProtein,
+        isProteinWidgetDismissed,
         settings: {
           theme,
           colorTheme,
           language,
           weightUnit: settingsWeightUnit,
           heightUnit: settingsHeightUnit,
+          energyUnit: settingsEnergyUnit,
           restTime: settingsRestTime,
+          autoRest: settingsAutoRest,
+          haptics: settingsHaptics,
+          macroFormula: settingsMacroFormula,
           soundEnabled
         }
       };
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const safeName = String(profile?.name || 'athlete').replace(/[^\w\-]+/g, '_') || 'athlete';
+      const filename = `bqgym_backup_${safeName}_${new Date().toISOString().slice(0, 10)}.json`;
+
+      const isNativeOrMobile = typeof navigator !== 'undefined' && (
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '') ||
+        (typeof window !== 'undefined' && Boolean(window.Capacitor))
+      );
+
+      if (isNativeOrMobile && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          if (typeof File !== 'undefined') {
+            const fileObj = new File([jsonStr], filename, { type: 'application/json' });
+            if (!navigator.canShare || navigator.canShare({ files: [fileObj] })) {
+              await navigator.share({ title: 'BQ GYM Backup', files: [fileObj] });
+              if (typeof playSparkleSound === 'function') playSparkleSound();
+              setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Backup shared/saved!' : '✓ باکئاپەکە بە سەرکەوتوویی هاوبەشکرا و پارێزرا!');
+              setTimeout(() => setSyncFeedbackMsg(''), 4000);
+              return;
+            }
+          }
+          await navigator.share({ title: 'BQ GYM Backup', text: jsonStr });
+          if (typeof playSparkleSound === 'function') playSparkleSound();
+          setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Backup shared!' : '✓ باکئاپەکە هاوبەش کرا!');
+          setTimeout(() => setSyncFeedbackMsg(''), 4000);
+          return;
+        } catch (shareErr) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+      }
+
+      const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `kurdfit_backup_${profile.name || 'athlete'}_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 1500);
+
       if (typeof playSparkleSound === 'function') playSparkleSound();
       setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Backup exported successfully!' : '✓ باکئاپەکە بە سەرکەوتوویی دابەزێندرا!');
       setTimeout(() => setSyncFeedbackMsg(''), 4000);
     } catch (err) {
-      alert('Export failed: ' + err.message);
+      alert((currentLangConfig.code === 'en' ? 'Export failed: ' : 'هەڵە لە دابەزاندنی باکئاپ: ') + err.message);
     }
   };
 
@@ -543,21 +620,89 @@ export default function App() {
         if (confirm(currentLangConfig.code === 'en' ? 'Are you sure you want to restore this backup? Current data will be replaced.' : 'دڵنیایت لە گەڕاندنەوەی ئەم باکئاپە؟ داتاکانی ئێستا دەگۆڕدرێن.')) {
           if (data.profile) {
             setProfile(data.profile);
-            try { localStorage.setItem('kurd_fit_profile_v5', JSON.stringify(data.profile)); } catch (err) {}
+            try { localStorage.setItem('app_profile', JSON.stringify(data.profile)); } catch (err) {}
           }
-          if (data.workoutCourse) {
+          if (data.workoutCourse !== undefined) {
             setWorkoutCourse(data.workoutCourse);
             try { localStorage.setItem('app_workout_course', JSON.stringify(data.workoutCourse)); } catch (err) {}
           }
-          if (data.nutritionHistory) {
-            setNutritionHistory(data.nutritionHistory);
-            try { localStorage.setItem('app_nutrition_history', JSON.stringify(data.nutritionHistory)); } catch (err) {}
+          if (Array.isArray(data.courseHistory)) {
+            setCourseHistory(data.courseHistory);
+            try { localStorage.setItem('app_course_history', JSON.stringify(data.courseHistory)); } catch (err) {}
+          }
+          if (data.dietMeals) {
+            setDietMeals(data.dietMeals);
+            try { localStorage.setItem('app_diet_meals', JSON.stringify(data.dietMeals)); } catch (err) {}
+          }
+          if (data.exerciseLogs) {
+            setExerciseLogs(data.exerciseLogs);
+            try { localStorage.setItem('app_exercise_set_logs', JSON.stringify(data.exerciseLogs)); } catch (err) {}
+          }
+          if (typeof data.waterMl === 'number') {
+            setWaterMl(data.waterMl);
+            try { localStorage.setItem('app_water_ml', String(data.waterMl)); } catch (err) {}
+          }
+          if (Array.isArray(data.completedDayIndices)) {
+            setCompletedDayIndices(data.completedDayIndices);
+            try { localStorage.setItem('app_completed_days_manual_v5', JSON.stringify(data.completedDayIndices)); } catch (err) {}
+          }
+          if (Array.isArray(data.aiCustomFoods)) {
+            setAiCustomFoods(data.aiCustomFoods);
+            try { localStorage.setItem('app_ai_custom_foods', JSON.stringify(data.aiCustomFoods)); } catch (err) {}
+          }
+          if (Array.isArray(data.coachMemory)) {
+            setCoachMemory(data.coachMemory);
+            try { localStorage.setItem('app_coach_memory', JSON.stringify(data.coachMemory)); } catch (err) {}
+          }
+          if (Array.isArray(data.chatMessages)) {
+            setChatMessages(data.chatMessages);
+            try { localStorage.setItem('app_chat_messages', JSON.stringify(data.chatMessages)); } catch (err) {}
+          }
+          if (data.lastUsedProtein) {
+            setLastUsedProtein(data.lastUsedProtein);
+            try { localStorage.setItem('app_last_used_protein', JSON.stringify(data.lastUsedProtein)); } catch (err) {}
+          }
+          if (typeof data.isProteinWidgetDismissed === 'boolean') {
+            setIsProteinWidgetDismissed(data.isProteinWidgetDismissed);
+            try { localStorage.setItem('app_protein_widget_dismissed', data.isProteinWidgetDismissed ? 'true' : 'false'); } catch (err) {}
           }
           if (data.settings?.theme) changeTheme(data.settings.theme);
           if (data.settings?.colorTheme) changeColorTheme(data.settings.colorTheme);
           if (data.settings?.language) changeLanguage(data.settings.language);
+          if (data.settings?.weightUnit) {
+            setSettingsWeightUnit(data.settings.weightUnit);
+            try { localStorage.setItem('app_weight_unit', data.settings.weightUnit); } catch (err) {}
+          }
+          if (data.settings?.heightUnit) {
+            setSettingsHeightUnit(data.settings.heightUnit);
+            try { localStorage.setItem('app_height_unit', data.settings.heightUnit); } catch (err) {}
+          }
+          if (data.settings?.energyUnit) {
+            setSettingsEnergyUnit(data.settings.energyUnit);
+            try { localStorage.setItem('app_energy_unit', data.settings.energyUnit); } catch (err) {}
+          }
+          if (data.settings?.restTime) {
+            setSettingsRestTime(Number(data.settings.restTime) || 60);
+            try { localStorage.setItem('app_default_rest_time', String(data.settings.restTime)); } catch (err) {}
+          }
+          if (typeof data.settings?.autoRest === 'boolean') {
+            setSettingsAutoRest(data.settings.autoRest);
+            try { localStorage.setItem('app_auto_rest_timer', data.settings.autoRest ? 'true' : 'false'); } catch (err) {}
+          }
+          if (typeof data.settings?.haptics === 'boolean') {
+            setSettingsHaptics(data.settings.haptics);
+            try { localStorage.setItem('app_haptics_enabled', data.settings.haptics ? 'true' : 'false'); } catch (err) {}
+          }
+          if (data.settings?.macroFormula) {
+            setSettingsMacroFormula(data.settings.macroFormula);
+            try { localStorage.setItem('app_macro_formula', data.settings.macroFormula); } catch (err) {}
+          }
+          if (typeof data.settings?.soundEnabled === 'boolean') {
+            toggleSound(data.settings.soundEnabled);
+          }
           if (typeof playSparkleSound === 'function') playSparkleSound();
-          alert(currentLangConfig.code === 'en' ? 'Data restored successfully!' : 'داتاکان بە سەرکەوتوویی گەڕێندرانەوە!');
+          setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Data restored successfully!' : '✓ داتاکان بە سەرکەوتوویی گەڕێندرانەوە!');
+          setTimeout(() => setSyncFeedbackMsg(''), 4000);
         }
       } catch (err) {
         alert(currentLangConfig.code === 'en' ? 'Failed to read backup file: ' + err.message : 'هەڵە لە خوێندنەوەی فایل: ' + err.message);
@@ -583,17 +728,59 @@ export default function App() {
   };
 
   const handleManualCloudSync = async () => {
+    if (!authUser?.uid) {
+      setSyncFeedbackMsg(currentLangConfig.code === 'en' ? 'Sign in first to enable cloud sync.' : 'سەرەتا بچۆ ژوورەوە بۆ سینککردن لەگەڵ کلاود.');
+      setShowAuthModal(true);
+      setTimeout(() => setSyncFeedbackMsg(''), 4500);
+      return;
+    }
     setIsManualSyncing(true);
     setSyncFeedbackMsg(currentLangConfig.code === 'en' ? 'Syncing data with cloud...' : 'خەریکی سینککردنە لەگەڵ کلاود...');
     try {
-      await new Promise(r => setTimeout(r, 1000));
+      const targetId = authUser.uid;
+      const docRef = doc(db, 'users', targetId);
+      const payload = safeSerialize({
+        profile,
+        athleteId: targetId,
+        isGuest: false,
+        authType: authUser.phoneNumber ? 'phone' : 'google',
+        name: profile?.name || authUser?.displayName || 'یاریزانی BQ GYM',
+        phone: profile?.phone || authUser?.phoneNumber || '',
+        email: authUser?.email || '',
+        isSuspended: isAppSuspended,
+        status: isAppSuspended ? 'suspended' : 'active',
+        dietMeals,
+        workoutCourse,
+        courseHistory: (courseHistory || []).filter(c => c !== null),
+        coachMemory,
+        hasCompletedOnboarding,
+        chatMessages,
+        exerciseLogs,
+        waterMl,
+        completedDayIndices,
+        aiCustomFoods,
+        theme,
+        colorTheme,
+        language,
+        lastUpdated: new Date().toISOString()
+      });
+      await setDoc(docRef, payload, { merge: true });
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const cloudData = snap.data();
+        if (cloudData.updatedWorkoutCourse) {
+          setWorkoutCourse(cloudData.updatedWorkoutCourse);
+          try { localStorage.setItem('app_workout_course', JSON.stringify(cloudData.updatedWorkoutCourse)); } catch (e) {}
+        }
+      }
       if (typeof playSparkleSound === 'function') playSparkleSound();
+      triggerHapticFeedback(20);
       setSyncFeedbackMsg(currentLangConfig.code === 'en' ? '✓ Cloud sync completed!' : '✓ تەواوی داتاکان بە سەرکەوتوویی سینک کران!');
     } catch (e) {
-      setSyncFeedbackMsg('Sync error: ' + e.message);
+      setSyncFeedbackMsg((currentLangConfig.code === 'en' ? 'Cloud sync failed: ' : 'هەڵە لە سینککردنی کلاود: ') + (e?.code || e?.message || 'Error'));
     } finally {
       setIsManualSyncing(false);
-      setTimeout(() => setSyncFeedbackMsg(''), 4000);
+      setTimeout(() => setSyncFeedbackMsg(''), 4500);
     }
   };
 
@@ -1625,19 +1812,27 @@ export default function App() {
       },
       lastPhysiqueScan: new Date().toLocaleDateString()
     };
-    setProfile(updatedProfile);
+    const finalProfile = analysisResult.recommendedCalories
+      ? {
+          ...updatedProfile,
+          goalCalories: analysisResult.recommendedCalories,
+          goalProtein: analysisResult.recommendedProtein || updatedProfile.goalProtein,
+          goalCarbs: Math.max(
+            50,
+            Math.round(
+              (Number(analysisResult.recommendedCalories) -
+                ((Number(analysisResult.recommendedProtein) || updatedProfile.goalProtein || 150) * 4) -
+                ((Number(updatedProfile.goalFat) || 65) * 9)) / 4
+            )
+          )
+        }
+      : updatedProfile;
+
+    setProfile(finalProfile);
 
     try {
-      localStorage.setItem('kurd_fit_profile_v5', JSON.stringify(updatedProfile));
+      localStorage.setItem('app_profile', JSON.stringify(finalProfile));
     } catch (e) {}
-
-    if (analysisResult.recommendedCalories) {
-      setProfileGoals(prev => ({
-        ...prev,
-        calories: analysisResult.recommendedCalories,
-        proteins: analysisResult.recommendedProtein || prev.proteins
-      }));
-    }
 
     if (analysisResult.laggingMuscles && analysisResult.laggingMuscles.length > 0) {
       try {
@@ -1900,6 +2095,10 @@ export default function App() {
               setBuilderDaysCount(data.recommendedDays);
               return;
             }
+          }
+          if (typeof window !== "undefined" && (window.Capacitor || window.location?.protocol === 'capacitor:' || window.location?.protocol === 'file:')) {
+            setAiDaysRecommendation({ days: 4, text: 'بەپێی زانیارییەکانت، ٤ ڕۆژ مامناوەند و گونجاوە.', loading: false });
+            return;
           }
           const res = await fetch('/api/recommend-days', {
             method: 'POST',
@@ -2420,8 +2619,11 @@ export default function App() {
 
     if (willBeCompleted) {
       playSetCompleteSound();
-      setActiveTimerSet({ exKey: exerciseName, setIdx, exIdx });
-      startRestTimer(60);
+      triggerHapticFeedback(18);
+      if (settingsAutoRest !== false) {
+        setActiveTimerSet({ exKey: exerciseName, setIdx, exIdx });
+        startRestTimer(Number(settingsRestTime) || 60);
+      }
     } else {
       playUncheckSound();
       if (activeTimerSet?.setIdx === setIdx && (activeTimerSet?.exKey === exerciseName || activeTimerSet?.exIdx === exIdx)) {
@@ -2454,8 +2656,12 @@ export default function App() {
     });
 
     playSetCompleteSound();
-    setActiveTimerSet({ exKey: exerciseName, setIdx: targetIdx, exIdx });
-    startRestTimer(Number(restSeconds) || 60);
+    triggerHapticFeedback(18);
+    if (settingsAutoRest !== false) {
+      setActiveTimerSet({ exKey: exerciseName, setIdx: targetIdx, exIdx });
+      const chosenRest = (Number(settingsRestTime) && Number(settingsRestTime) !== 60) ? Number(settingsRestTime) : (Number(restSeconds) || Number(settingsRestTime) || 60);
+      startRestTimer(chosenRest);
+    }
   };
 
   // کەمکردنەوەی سێتی تەواوبوو (-) بەبێ دەستپێکردنی کاونتداون
@@ -3303,7 +3509,11 @@ export default function App() {
             if (data.language) setLanguage(data.language);
           }
         } catch (error) {
-          console.error("Error loading user data from cloud:", error);
+          if (error?.code === 'permission-denied') {
+            console.warn("Cloud data read permission-denied; using local data.");
+          } else {
+            console.error("Error loading user data from cloud:", error);
+          }
         } finally {
           setIsSyncing(false);
           setTimeout(() => {
@@ -3385,7 +3595,7 @@ export default function App() {
       if (updatedWorkoutCourse) {
         setWorkoutCourse(updatedWorkoutCourse);
         try {
-          localStorage.setItem('kurd_fit_course_v5', JSON.stringify(updatedWorkoutCourse));
+          localStorage.setItem('app_workout_course', JSON.stringify(updatedWorkoutCourse));
         } catch (e) {}
       }
     });
@@ -8403,24 +8613,28 @@ Rules:
               </div>
 
               {/* پەیامی فیدباک ئەگەر هەبێت (Toast feedback banner) */}
-              {(syncFeedbackMsg || cacheClearMsg) && (
-                <div style={{
-                  padding: '12px 16px',
-                  borderRadius: '16px',
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  border: '1px solid rgba(16, 185, 129, 0.35)',
-                  color: '#10B981',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <CheckCircle2 size={18} />
-                  <span>{syncFeedbackMsg || cacheClearMsg}</span>
-                </div>
-              )}
+              {(syncFeedbackMsg || cacheClearMsg) && (() => {
+                const msg = syncFeedbackMsg || cacheClearMsg;
+                const isSuccess = msg.startsWith('✓');
+                return (
+                  <div style={{
+                    padding: '12px 16px',
+                    borderRadius: '16px',
+                    background: isSuccess ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                    border: isSuccess ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
+                    color: isSuccess ? '#10B981' : '#F59E0B',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {isSuccess ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+                    <span>{msg}</span>
+                  </div>
+                );
+              })()}
 
               {/* بەشی ١: هەژمار و کلاود (Account & Athlete Card) */}
               <div className="dark-card" style={{ padding: '20px', marginBottom: '16px', borderRadius: '22px' }}>
@@ -8634,7 +8848,7 @@ Rules:
                   <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '10px' }}>
                     {currentLangConfig.code === 'en' ? 'Primary Accent Color:' : 'ڕەنگی بنەڕەتیی بەرنامە (Primary Accent):'}
                   </div>
-                  <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '6px' }}>
+                  <div className="hide-scrollbar" style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '6px' }}>
                     {[
                       { id: 'system', name: currentLangConfig.code === 'en' ? 'Auto' : 'خۆکار', color1: '#94a3b8', color2: '#475569' },
                       { id: 'default', name: currentLangConfig.code === 'en' ? 'Royal Blue' : 'شینی شاهانە', color1: '#2563EB', color2: '#38BDF8' },
@@ -8687,6 +8901,9 @@ Rules:
                       const next = !settingsHaptics;
                       setSettingsHaptics(next);
                       try { localStorage.setItem('app_haptics_enabled', next ? 'true' : 'false'); } catch (e) {}
+                      if (next && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                        try { navigator.vibrate(25); } catch (e) {}
+                      }
                     }}
                     style={{
                       padding: '6px 14px',
@@ -8876,9 +9093,8 @@ Rules:
                     <button
                       type="button"
                       onClick={() => {
-                        const next = !soundEnabled;
-                        setSoundEnabled(next);
-                        try { localStorage.setItem('app_sound_enabled', next ? 'true' : 'false'); } catch (e) {}
+                        toggleSound(!soundEnabled);
+                        triggerHapticFeedback(15);
                       }}
                       style={{
                         padding: '6px 14px',
@@ -8934,7 +9150,7 @@ Rules:
                   <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '8px' }}>
                     {currentLangConfig.code === 'en' ? 'Default Rest Duration:' : 'ماوەی بنەڕەتیی پشووی نێوان سێتەکان:'}
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '6px' }}>
                     {[30, 60, 90, 120, 180].map(sec => (
                       <button
                         key={sec}
@@ -8942,20 +9158,22 @@ Rules:
                         onClick={() => {
                           setSettingsRestTime(sec);
                           try { localStorage.setItem('app_default_rest_time', String(sec)); } catch(e){}
+                          triggerHapticFeedback(12);
                         }}
                         style={{
-                          padding: '6px 14px',
+                          padding: '8px 4px',
                           borderRadius: '12px',
-                          fontSize: '12px',
+                          fontSize: '11.5px',
                           fontWeight: '800',
                           cursor: 'pointer',
+                          textAlign: 'center',
                           border: settingsRestTime === sec ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
                           background: settingsRestTime === sec ? 'var(--accent-gradient)' : 'var(--card-subtle)',
                           color: settingsRestTime === sec ? '#ffffff' : 'var(--text-main)',
                           boxShadow: settingsRestTime === sec ? '0 2px 10px var(--accent-glow)' : 'none'
                         }}
                       >
-                        {sec}s ({sec / 60 >= 1 ? `${sec / 60}m` : `${sec}s`})
+                        {sec}s
                       </button>
                     ))}
                   </div>
@@ -9016,7 +9234,7 @@ Rules:
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => { setSettingsMacroFormula(m.id); try { localStorage.setItem('app_macro_formula', m.id); } catch(e){} }}
+                        onClick={() => applyMacroFormulaSetting(m.id)}
                         className="liquid-pill"
                         style={{
                           padding: '10px 8px',
@@ -9194,9 +9412,9 @@ Rules:
                     width: '100%',
                     padding: '13px',
                     borderRadius: '16px',
-                    background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%)',
+                    background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.22) 0%, rgba(59, 130, 246, 0.22) 100%)',
                     border: '1.5px solid rgba(168, 85, 247, 0.45)',
-                    color: '#ffffff',
+                    color: 'var(--text-main)',
                     fontSize: '13px',
                     fontWeight: '900',
                     cursor: 'pointer',
@@ -9204,10 +9422,10 @@ Rules:
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 14px rgba(168, 85, 247, 0.25)'
+                    boxShadow: '0 4px 14px rgba(168, 85, 247, 0.22)'
                   }}
                 >
-                  <ShieldCheck size={18} style={{ color: '#c084fc' }} />
+                  <ShieldCheck size={18} style={{ color: '#a855f7' }} />
                   <span>{currentLangConfig.code === 'en' ? 'Open Coach & Admin Console' : 'کردنەوەی کۆنسۆڵی ڕاهێنەران و بەڕێوەبەر'}</span>
                 </button>
               </div>

@@ -20,7 +20,6 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="BQ GYM" />
@@ -53,6 +52,11 @@ export default function RootLayout({ children }) {
 
                 var lastTouchEnd = 0;
                 document.addEventListener('touchend', function(e) {
+                  var target = e.target;
+                  if (target && target.closest && target.closest('button, a, input, select, textarea, label, [role="button"], .liquid-pill, .clickable-item')) {
+                    lastTouchEnd = Date.now();
+                    return;
+                  }
                   var now = Date.now();
                   if (now - lastTouchEnd <= 300) {
                     e.preventDefault();
