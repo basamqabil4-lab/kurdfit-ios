@@ -8228,24 +8228,26 @@ Rules:
                     type="button"
                     onClick={() => setShowLogoutConfirmModal(true)}
                     style={{
-                      background: 'rgba(0, 0, 0, 0.45)',
+                      background: 'rgba(239, 68, 68, 0.22)',
                       backdropFilter: 'blur(10px)',
                       WebkitBackdropFilter: 'blur(10px)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      border: '1.5px solid rgba(239, 68, 68, 0.5)',
                       borderRadius: '50%',
-                      width: '36px',
-                      height: '36px',
+                      width: '40px',
+                      height: '40px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#f87171',
+                      color: '#ef4444',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                      boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)'
                     }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     title={t('logout') || "Log Out"}
                   >
-                    <LogOut size={16} />
+                    <LogOut size={18} />
                   </button>
                 ) : (
                   <button
@@ -8257,8 +8259,8 @@ Rules:
                       WebkitBackdropFilter: 'blur(10px)',
                       border: '1px solid rgba(255, 255, 255, 0.2)',
                       borderRadius: '50%',
-                      width: '36px',
-                      height: '36px',
+                      width: '40px',
+                      height: '40px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -8267,9 +8269,11 @@ Rules:
                       transition: 'all 0.2s ease',
                       boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
                     }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     title={t('login') || "Sign In"}
                   >
-                    <User size={16} />
+                    <User size={18} />
                   </button>
                 )}
               </div>
@@ -8352,29 +8356,30 @@ Rules:
                   />
                 </div>
 
-                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Bookmark / Edit Action Button on RIGHT) */}
+                {/* دوگمەی هێمای گۆڕینی پرۆفایل لە لای ڕاست (Standard Uniform Edit Button: White Shape + Blue Icon) */}
                 <button
                   type="button"
                   onClick={() => { setEditFormData({ ...profile }); setShowEditProfileModal(true); }}
                   style={{
-                    width: '44px',
-                    height: '44px',
+                    width: '40px',
+                    height: '40px',
                     borderRadius: '50%',
-                    background: 'var(--card-subtle)',
-                    border: '1px solid var(--border-color)',
+                    background: '#ffffff',
+                    border: '1px solid rgba(0, 0, 0, 0.08)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: 'var(--text-main)',
+                    color: '#2563eb',
                     cursor: 'pointer',
                     boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0
                   }}
                   onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
                   onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                   title={t('editProfile')}
                 >
-                  <EditIcon size={18} />
+                  <EditIcon size={18} color="#2563eb" />
                 </button>
               </div>
 
@@ -8660,14 +8665,29 @@ Rules:
               </div>
               
               <div style={{ display: 'flex', gap: '6px' }}>
-
                 <button 
+                  type="button"
                   onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
-                  className="liquid-pill"
-                  style={{ padding: '8px', cursor: 'pointer', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    border: '1px solid rgba(0, 0, 0, 0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2563eb',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                   title={t('change')}
                 >
-                  <EditIcon size={14} color="var(--accent-primary)" />
+                  <EditIcon size={18} color="#2563eb" />
                 </button>
               </div>
             </div>
@@ -8790,11 +8810,26 @@ Rules:
               <button
                 type="button"
                 onClick={() => setShowSupplementsModal(true)}
-                className="liquid-pill"
-                style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-primary)' }}
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid rgba(0, 0, 0, 0.08)',
+                  borderRadius: '12px',
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#2563eb',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.03)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
               >
-                <EditIcon size={13} />
-                <span>{language === 'en' ? 'Edit' : 'دەستکاری'}</span>
+                <EditIcon size={14} color="#2563eb" />
+                <span style={{ color: '#2563eb', fontWeight: '800' }}>{language === 'en' ? 'Edit' : 'دەستکاری'}</span>
               </button>
             </div>
 
