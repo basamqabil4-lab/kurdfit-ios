@@ -2,13 +2,14 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { 
   ShieldCheck, ShieldAlert, Users, Camera, Dumbbell, 
   Search, RefreshCw, X, Lock, CheckCircle2, AlertTriangle, 
   Trash2, Edit3, Plus, ArrowLeft, ArrowRight, Eye, Download,
   Flame, Sparkles, UserX, UserCheck, KeyRound, ExternalLink,
   ChevronDown, ChevronUp, SlidersHorizontal, Filter, UserMinus,
-  Check, UserPlus, Shield
+  Check, UserPlus, Shield, MapPin, Clock, Phone
 } from 'lucide-react';
 import { 
   fetchAllAthletes, 
@@ -18,11 +19,23 @@ import {
   fetchAdminsList,
   saveAdminAccount,
   deleteAdminAccount,
-  DEFAULT_SUPER_ADMIN
+  DEFAULT_SUPER_ADMIN,
+  fetchCommercialLocations,
+  subscribeToCommercialLocations,
+  saveCommercialLocation,
+  deleteCommercialLocation
 } from '../utils/cloudSync';
 import { playSparkleSound, playCaptureSuccessSound, triggerHaptic } from '../utils/audioFX';
+import {
+  DEFAULT_MAP_CENTER,
+  PARTNER_CATEGORIES,
+  getCategoryLabel,
+  getCategoryMeta
+} from '../utils/mapHelpers';
 
-export default function AdminDashboardModal({ isOpen, onClose }) {
+const AdminLocationPickerMap = dynamic(() => import('./AdminLocationPickerMap'), { ssr: false });
+
+export default function AdminDashboardModal({ isOpen, onClose, appTheme = 'dark' }) {
   // دۆخی چوونەژوورەوە و ئەدمینی چالاک
   const [currentAdmin, setCurrentAdmin] = useState(null);
   const [pinInput, setPinInput] = useState('');
@@ -86,6 +99,64 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
   // وێنەی گەورەکراو
   const [previewImage, setPreviewImage] = useState(null);
 
+  // دۆخی نەخشەی بازرگانی هاوبەشەکان (Commercial B2B Partner Locations Manager)
+  const createEmptyPartnerForm = () => ({
+    id: '',
+    name: '',
+    category: 'gym',
+    city: 'هەولێر',
+    address: '',
+    workingHours: '08:00 AM - 12:00 AM',
+    lat: DEFAULT_MAP_CENTER.lat,
+    lng: DEFAULT_MAP_CENTER.lng,
+    phoneOrWhatsapp: '',
+    discountCode: '',
+    discountText: '',
+    isFeaturedVip: false
+  });
+  const [commercialLocations, setCommercialLocations] = useState([]);
+  const [partnerForm, setPartnerForm] = useState(createEmptyPartnerForm);
+  const [isSavingPartner, setIsSavingPartner] = useState(false);
+  const [partnerFeedbackMsg, setPartnerFeedbackMsg] = useState('');
+
+  const handleSavePartnerLocation = async (e) => {
+    if (e) e.preventDefault();
+    if (!partnerForm.name.trim()) return;
+    setIsSavingPartner(true);
+    try {
+      const saved = await saveCommercialLocation({
+        ...partnerForm,
+        id: partnerForm.id || undefined,
+        createdAt: partnerForm.createdAt || new Date().toISOString()
+      });
+      if (saved) {
+        setPartnerForm(createEmptyPartnerForm());
+        setPartnerFeedbackMsg('✓ شوێنی هاوبەش بە سەرکەوتوویی پاشەکەوت کرا!');
+        setTimeout(() => setPartnerFeedbackMsg(''), 3500);
+        playSparkleSound();
+      }
+    } finally {
+      setIsSavingPartner(false);
+    }
+  };
+
+  const handleEditPartnerLocation = (loc) => {
+    setPartnerForm({
+      ...createEmptyPartnerForm(),
+      ...loc
+    });
+    setPartnerFeedbackMsg('');
+  };
+
+  const handleDeletePartnerLocation = async (locId) => {
+    if (!locId) return;
+    await deleteCommercialLocation(locId);
+    if (partnerForm.id === locId) {
+      setPartnerForm(createEmptyPartnerForm());
+    }
+    triggerHaptic(20);
+  };
+
   // چوونەژوورەوەی ئەدمین بەپێی کۆدی نهێنی
   const handleLogin = (e) => {
     if (e) e.preventDefault();
@@ -110,12 +181,14 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const [athletesList, admins] = await Promise.all([
+      const [athletesList, admins, partners] = await Promise.all([
         fetchAllAthletes(),
-        fetchAdminsList()
+        fetchAdminsList(),
+        fetchCommercialLocations()
       ]);
       setAthletes(athletesList);
       setAdminsList(admins);
+      if (Array.isArray(partners)) setCommercialLocations(partners);
     } catch (err) {
       console.error('Failed to load data:', err);
       setFetchError(err.message || 'نەتوانرا پەیوەندی بە داتابەیسەوە بکرێت');
@@ -131,7 +204,13 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
       const unsub = subscribeToAllAthletes((liveList) => {
         setAthletes(liveList);
       });
-      return () => unsub();
+      const unsubPartners = subscribeToCommercialLocations((livePartners) => {
+        setCommercialLocations(livePartners);
+      });
+      return () => {
+        unsub();
+        unsubPartners();
+      };
     }
   }, [isOpen, currentAdmin]);
 
@@ -434,15 +513,17 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
             <div style={{
               width: '68px',
               height: '68px',
-              borderRadius: '22px',
-              background: 'linear-gradient(135deg, #9333EA 0%, #3B82F6 100%)',
+              borderRadius: '20px',
+              background: '#000000',
+              border: '1px solid rgba(255,255,255,0.16)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 18px auto',
-              boxShadow: '0 12px 30px rgba(147, 51, 234, 0.4)'
+              overflow: 'hidden',
+              boxShadow: '0 12px 30px rgba(0, 164, 255, 0.25)'
             }}>
-              <ShieldCheck size={34} color="#ffffff" />
+              <img src="/logo.svg" alt="BQ GYM" style={{ width: '68px', height: '68px', display: 'block' }} />
             </div>
 
             <h2 style={{ fontSize: '21px', fontWeight: '900', margin: '0 0 6px 0', color: '#ffffff' }}>
@@ -601,13 +682,14 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
             </div>
           </header>
 
-          {/* ٣ دوگمەی سەرەکی بۆ گۆڕینی بەشەکان: (لیستی یاریزانان / ئەلبوومی وێنەکان / بەڕێوەبەران) */}
+          {/* بەشە سەرەکییەکانی پانێڵ */}
           <div style={{
             display: 'flex',
+            flexWrap: 'wrap',
             background: 'rgba(15, 23, 42, 0.7)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            padding: '4px 10px',
-            gap: '8px'
+            padding: '6px 10px',
+            gap: '6px'
           }}>
             <button
               onClick={() => setMainView('athletes')}
@@ -651,6 +733,28 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
             >
               <Camera size={16} />
               <span>ئەلبوومی وێنەکان ({athletesWithPhotos.length})</span>
+            </button>
+
+            <button
+              onClick={() => setMainView('commercial')}
+              style={{
+                flex: 1,
+                padding: '10px',
+                borderRadius: '12px',
+                border: 'none',
+                background: mainView === 'commercial' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                color: mainView === 'commercial' ? '#0f172a' : '#94a3b8',
+                fontSize: '13px',
+                fontWeight: '900',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              <MapPin size={16} />
+              <span>نەخشەی بازرگانی ({commercialLocations.length})</span>
             </button>
 
             {currentAdmin.permissions?.canManageAdmins && (
@@ -1381,6 +1485,385 @@ export default function AdminDashboardModal({ isOpen, onClose }) {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* دیمەنی ٤: نەخشەی بازرگانی هاوبەشەکان (Commercial B2B Partner Locations Manager) */}
+            {mainView === 'commercial' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: '900', margin: 0, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <MapPin size={18} />
+                      <span>بەڕێوەبردنی نەخشەی بازرگانی و سپۆنسەرەکان</span>
+                    </h3>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', margin: '3px 0 0 0' }}>
+                      هۆڵی وەرزشی، خواردنگەی تەندروست و فرۆشگای سەپلیمێنت ڕاستەوخۆ لەسەر نەخشەی ناوخۆیی زیاد بکە و دەستکاری بکە.
+                    </p>
+                  </div>
+
+                  {partnerForm.id && (
+                    <button
+                      type="button"
+                      onClick={() => setPartnerForm(createEmptyPartnerForm())}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '10px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + زیادکردنی شوێنی نوێ
+                    </button>
+                  )}
+                </div>
+
+                {/* فۆڕم + مینی-نەخشەی هەڵبژاردنی پۆینت لە ناو ئەپدا */}
+                <form
+                  onSubmit={handleSavePartnerLocation}
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    border: partnerForm.isFeaturedVip ? '1.5px solid rgba(245, 158, 11, 0.55)' : '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '18px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#ffffff' }}>
+                    {partnerForm.id ? '✏️ دەستکاریکردنی شوێنی هاوبەش' : '➕ زیادکردنی شوێنی هاوبەشی نوێ'}
+                  </div>
+
+                  <AdminLocationPickerMap
+                    lat={partnerForm.lat}
+                    lng={partnerForm.lng}
+                    category={partnerForm.category}
+                    isFeaturedVip={partnerForm.isFeaturedVip}
+                    initialTheme={appTheme === 'light' ? 'light' : 'dark'}
+                    onPickCoordinates={(nextLat, nextLng, cityHint, addressHint) => {
+                      setPartnerForm((prev) => ({
+                        ...prev,
+                        lat: nextLat,
+                        lng: nextLng,
+                        city: !prev.city && cityHint ? cityHint : (cityHint && !prev.id ? cityHint : prev.city),
+                        address: !prev.address && addressHint ? addressHint : prev.address
+                      }));
+                    }}
+                  />
+
+                  {/* پۆلەکان بە ڕەنگی تایبەت */}
+                  <div>
+                    <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: '800' }}>
+                      پۆلی بازرگانی:
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                      {['gym', 'restaurant', 'supplement'].map((catId) => {
+                        const meta = PARTNER_CATEGORIES[catId];
+                        const active = partnerForm.category === catId;
+                        return (
+                          <button
+                            key={catId}
+                            type="button"
+                            onClick={() => setPartnerForm(prev => ({ ...prev, category: catId }))}
+                            style={{
+                              padding: '10px 8px',
+                              borderRadius: '12px',
+                              border: active ? `1.5px solid ${meta.color}` : '1px solid rgba(255,255,255,0.12)',
+                              background: active ? meta.bgTint : 'rgba(0,0,0,0.28)',
+                              color: active ? '#ffffff' : '#cbd5e1',
+                              fontSize: '12px',
+                              fontWeight: '800',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: meta.color }} />
+                            <span>{meta.emoji} {meta.labelKu}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ناوی شوێن / براند (*):</label>
+                      <input
+                        type="text"
+                        required
+                        value={partnerForm.name}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="نموونە: Royal Gym Erbil"
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>شار:</label>
+                      <input
+                        type="text"
+                        value={partnerForm.city}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, city: e.target.value }))}
+                        placeholder="هەولێر / سلێمانی / دهۆک"
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ناونیشانی ورد:</label>
+                      <input
+                        type="text"
+                        value={partnerForm.address}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, address: e.target.value }))}
+                        placeholder="شەقامی ١٠٠ مەتری، نزیک..."
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>کاتی کارکردن:</label>
+                      <input
+                        type="text"
+                        value={partnerForm.workingHours}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, workingHours: e.target.value }))}
+                        placeholder="08:00 AM - 12:00 AM"
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ژمارەی مۆبایل / واتسئەپ:</label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={partnerForm.phoneOrWhatsapp}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, phoneOrWhatsapp: e.target.value }))}
+                        placeholder="+964750..."
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>کۆدی داشکاندن (Promo Code):</label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={partnerForm.discountCode}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, discountCode: e.target.value }))}
+                        placeholder="BQGYM20"
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fbbf24', fontWeight: '800', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: '11.5px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>دەقی ئۆفەر یان داشکاندن:</label>
+                      <input
+                        type="text"
+                        value={partnerForm.discountText}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, discountText: e.target.value }))}
+                        placeholder="٢٠٪ داشکاندن بۆ یاریزانانی BQ GYM"
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '13px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Latitude (پۆینت):</label>
+                      <input
+                        type="number"
+                        step="0.000001"
+                        dir="ltr"
+                        value={partnerForm.lat}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, lat: e.target.value }))}
+                        style={{ width: '100%', padding: '9px 10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#38bdf8', fontSize: '12.5px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Longitude (پۆینت):</label>
+                      <input
+                        type="number"
+                        step="0.000001"
+                        dir="ltr"
+                        value={partnerForm.lng}
+                        onChange={(e) => setPartnerForm(prev => ({ ...prev, lng: e.target.value }))}
+                        style={{ width: '100%', padding: '9px 10px', borderRadius: '10px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', color: '#38bdf8', fontSize: '12.5px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* سویچی Is VIP Sponsor (Featured) */}
+                  <button
+                    type="button"
+                    onClick={() => setPartnerForm(prev => ({ ...prev, isFeaturedVip: !prev.isFeaturedVip }))}
+                    style={{
+                      padding: '11px 14px',
+                      borderRadius: '12px',
+                      background: partnerForm.isFeaturedVip ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255,255,255,0.05)',
+                      border: partnerForm.isFeaturedVip ? '1.5px solid #f59e0b' : '1px solid rgba(255,255,255,0.15)',
+                      color: partnerForm.isFeaturedVip ? '#fbbf24' : '#cbd5e1',
+                      fontSize: '12.5px',
+                      fontWeight: '900',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span>⭐ سپۆنسەری تایبەتی VIP (Is VIP Sponsor / Featured)</span>
+                    <span style={{
+                      padding: '3px 10px',
+                      borderRadius: '99px',
+                      background: partnerForm.isFeaturedVip ? '#f59e0b' : 'rgba(255,255,255,0.12)',
+                      color: partnerForm.isFeaturedVip ? '#0f172a' : '#94a3b8',
+                      fontSize: '11px'
+                    }}>
+                      {partnerForm.isFeaturedVip ? 'چالاکە ✓' : 'ناچالاک'}
+                    </span>
+                  </button>
+
+                  {partnerFeedbackMsg && (
+                    <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#10b981' }}>{partnerFeedbackMsg}</div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="submit"
+                      disabled={isSavingPartner}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        border: 'none',
+                        color: '#0f172a',
+                        fontSize: '13.5px',
+                        fontWeight: '900',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isSavingPartner ? 'خەریکی پاشەکەوتکردنە...' : (partnerForm.id ? 'نوێکردنەوەی شوێن' : 'پاشەکەوتکردن لە نەخشەی بازرگانیدا')}
+                    </button>
+                    {partnerForm.id && (
+                      <button
+                        type="button"
+                        onClick={() => setPartnerForm(createEmptyPartnerForm())}
+                        style={{
+                          padding: '12px 16px',
+                          borderRadius: '12px',
+                          background: 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          color: '#fff',
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        پاشگەزبوونەوە
+                      </button>
+                    )}
+                  </div>
+                </form>
+
+                {/* لیستی شوێنە بازرگانییە تۆمارکراوەکان */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                  {commercialLocations.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px', color: '#64748b', background: 'rgba(15, 23, 42, 0.45)', borderRadius: '16px' }}>
+                      هێشتا هیچ شوێنێکی بازرگانی زیاد نەکراوە. لە فۆڕمەکەی سەرەوە شوێنی یەکەم دابنێ!
+                    </div>
+                  ) : (
+                    commercialLocations.map((loc) => {
+                      const meta = getCategoryMeta(loc.category);
+                      return (
+                        <div
+                          key={loc.id}
+                          style={{
+                            background: 'rgba(15, 23, 42, 0.78)',
+                            border: loc.isFeaturedVip ? '1.5px solid rgba(245, 158, 11, 0.55)' : '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '16px',
+                            padding: '14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                            <div>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '10.5px', fontWeight: '900', padding: '2px 8px', borderRadius: '8px', background: meta.bgTint, color: meta.color }}>
+                                  {meta.emoji} {getCategoryLabel(loc.category, 'ku')}
+                                </span>
+                                {loc.isFeaturedVip && (
+                                  <span style={{ fontSize: '10.5px', fontWeight: '900', padding: '2px 8px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24' }}>
+                                    ★ VIP
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '14.5px', fontWeight: '900', color: '#ffffff' }}>{loc.name}</div>
+                              <div style={{ fontSize: '11.5px', color: '#94a3b8' }}>{[loc.city, loc.address].filter(Boolean).join(' • ')}</div>
+                            </div>
+                          </div>
+
+                          <div style={{ fontSize: '11.5px', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {loc.workingHours && <div><Clock size={12} className="inline-block" /> {loc.workingHours}</div>}
+                            {loc.phoneOrWhatsapp && <div><Phone size={12} className="inline-block" /> <span dir="ltr">{loc.phoneOrWhatsapp}</span></div>}
+                            {loc.discountCode && (
+                              <div style={{ color: '#fbbf24', fontWeight: '800' }}>
+                                🎁 {loc.discountCode} {loc.discountText ? `— ${loc.discountText}` : ''}
+                              </div>
+                            )}
+                            <div dir="ltr" style={{ fontSize: '10.5px', color: '#64748b' }}>
+                              {Number(loc.lat).toFixed(5)}, {Number(loc.lng).toFixed(5)}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleEditPartnerLocation(loc)}
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                borderRadius: '10px',
+                                background: 'rgba(6, 182, 212, 0.16)',
+                                border: '1px solid rgba(6, 182, 212, 0.35)',
+                                color: '#38bdf8',
+                                fontSize: '12px',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Edit3 size={13} />
+                              <span>دەستکاری</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePartnerLocation(loc.id)}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: '10px',
+                                background: 'rgba(239, 68, 68, 0.16)',
+                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                color: '#ef4444',
+                                fontSize: '12px',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}

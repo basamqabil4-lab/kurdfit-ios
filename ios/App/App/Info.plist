@@ -72,5 +72,7 @@
 	<string>Kurd Fit پێویستی بە مۆڵەتە بۆ پاشەکەوتکردنی وێنە و خشتەی ڕاهێنانەکان.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Kurd Fit پێویستی بە مایکرۆفۆنە بۆ تایبەتمەندی دەنگی ڕاهێنەری زیرەک.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>BQ GYM پێویستی بە شوێنی جوگرافیت هەیە بۆ پیشاندانی دووری هاوبەشەکان و ڕێنیشاندەری ناو نەخشە.</string>
 </dict>
 </plist>

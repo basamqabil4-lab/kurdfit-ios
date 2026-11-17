@@ -11,6 +11,7 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth, googleProvider } from '../../lib/firebase';
+import { BqGymLogo } from './Icons';
 
 const COUNTRIES = [
   { code: '+964', name: 'Iraq', flag: '🇮🇶' },
@@ -498,36 +499,21 @@ export default function AccountAuthModal({
         {/* Centered Squircle Brand Emblem */}
         <div
           style={{
-            width: '56px',
-            height: '56px',
+            width: '58px',
+            height: '58px',
             borderRadius: '16px',
-            background: '#0a0b0e',
-            border: '1px solid rgba(255, 255, 255, 0.14)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
+            background: '#000000',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
+            boxShadow: '0 8px 24px rgba(0, 164, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: '16px',
-            position: 'relative'
+            position: 'relative',
+            overflow: 'hidden'
           }}
         >
-          {/* Custom BQ GYM Geometric Athletic Emblem */}
-          <svg width="30" height="30" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Outer modern curve */}
-            <path 
-              d="M16 4C9.37 4 4 9.37 4 16C4 22.63 9.37 28 16 28C22.63 28 28 22.63 28 16C28 9.37 22.63 4 16 4Z" 
-              stroke="#ffffff" 
-              strokeWidth="2.4" 
-              strokeLinecap="round"
-              strokeDasharray="40 10"
-            />
-            {/* Central BQ athletic dumbbell core */}
-            <path 
-              d="M11 11H14C15.66 11 17 12.34 17 14C17 15.1 16.4 16.05 15.5 16.55C16.6 17.05 17.3 18.05 17.3 19.2C17.3 20.86 15.96 22.2 14.3 22.2H11V11Z" 
-              fill="#ffffff" 
-            />
-            <circle cx="21" cy="21" r="3.2" fill="#38BDF8" />
-          </svg>
+          <BqGymLogo size={56} showBackground={false} />
         </div>
 
         {/* Welcome Heading */}

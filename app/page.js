@@ -1,15 +1,15 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
-import { Camera, Utensils, Drumstick, Apple, Coffee, Bean, Flame, Ruler, Calculator, Check, MessageCircle, Zap, Sparkles, Dumbbell, Droplet, Target, Trophy, UtensilsCrossed, Clipboard, Salad, BicepsFlexed, Milk, Bandage, Hand, Egg, Fish, Beef, Cookie, Banana, Hamburger, Calendar, Bot, PersonStanding, X, Wheat, RefreshCw, Scale, User, ThumbsUp, Mic, AlertTriangle, Lightbulb, CalendarDays, MapPin, Settings, Palette, Moon, Sun, Globe, Pencil, Search, Timer, Play, Pause, RotateCcw, Printer, Download, Bell, Plus, Minus, Info, CheckCircle2, Video, Trash2, LogOut, Phone, Cloud, Volume2, VolumeX, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, SlidersHorizontal, Filter, Pill, Repeat, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Camera, Utensils, Drumstick, Apple, Coffee, Bean, Flame, Ruler, Check, Zap, Sparkles, Dumbbell, Droplet, Target, UtensilsCrossed, Clipboard, Salad, BicepsFlexed, Milk, Bandage, Hand, Egg, Fish, Beef, Cookie, Banana, Calendar, Bot, PersonStanding, X, Wheat, RefreshCw, Scale, User, ThumbsUp, AlertTriangle, Lightbulb, CalendarDays, MapPin, Navigation, Settings, Palette, Moon, Sun, Globe, Pencil, Search, Timer, Play, Pause, RotateCcw, Download, Bell, Plus, Minus, Info, CheckCircle2, Video, Trash2, LogOut, Cloud, Volume2, VolumeX, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, SlidersHorizontal, Filter, Pill, ShieldCheck, ShieldAlert, History, BatteryCharging, TrendingUp } from 'lucide-react';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-const MuscleAnatomy3D = dynamic(() => import('./components/MuscleAnatomy3D'), { ssr: false });
+const CommercialPartnerMap = dynamic(() => import('./components/CommercialPartnerMap'), { ssr: false });
 const CameraScanner = dynamic(() => import('./components/CameraScanner'), { ssr: false });
 const PhysiqueScannerModal = dynamic(() => import('./components/PhysiqueScannerModal'), { ssr: false });
 const AdminDashboardModal = dynamic(() => import('./components/AdminDashboardModal'), { ssr: false });
 const AccountAuthModal = dynamic(() => import('./components/AccountAuthModal'), { ssr: false });
 import ExerciseThumbnail from './components/ExerciseThumbnail';
-import { cacheWorkoutPlanMedia, getExerciseMediaUrl } from './utils/exerciseMedia';
+import { cacheWorkoutPlanMedia } from './utils/exerciseMedia';
 import { safeStorage } from './utils/safeStorage';
 import { auth, db, googleProvider } from '../lib/firebase';
 import { uploadPhysiquePhotos, subscribeToAthleteStatus } from './utils/cloudSync';
@@ -18,16 +18,26 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import * as audioFX from './utils/audioFX';
 import { 
   ProfilePic, SettingsIcon, BellIcon, TargetIcon, EditIcon, TrashIcon, 
-  AntigravityLogo, GeminiSparkleIcon, DeepSeekLogo, CameraScanIcon, WaterDropIcon, 
-  HealthCrossIcon, MaleIcon, FemaleIcon, SearchIcon, ChevronLeftIcon, ChevronRightIcon, 
-  SendIcon, AiNavIcon, MoreNavIcon, HomeNavIcon, WorkoutNavIcon, NutritionNavIcon, 
-  AddNavIcon, ProfileNavIcon, UIIcon 
+  CameraScanIcon, HealthCrossIcon, MaleIcon, FemaleIcon, 
+  SendIcon, MoreNavIcon, HomeNavIcon, WorkoutNavIcon, NutritionNavIcon, 
+  ProfileNavIcon, UIIcon, BqGymLogo 
 } from './components/Icons';
 import { 
   sanitizeWorkoutPlan, calculateScientificGoalByAi, generateAiScientificProgram, 
   MALE_BODY_PARTS, FEMALE_BODY_PARTS, DEFAULT_7_DAY_DIET,
   DAY_NAMES, DAY_SHORT_NAMES, COMMON_DIET_FOODS,
-  MASTER_SUPPLEMENTS_CATALOG, ALTERNATIVE_EXERCISES_CATALOG
+  MASTER_SUPPLEMENTS_CATALOG, ALTERNATIVE_EXERCISES_CATALOG,
+  ensureCourseStartDate, getCourseLifecycleMetrics, normalizeCourseHistoryList,
+  archiveCourseIntoHistory, reactivateArchivedCourse, deleteArchivedCourse,
+  getEffectiveDeloadState, getEffectiveExercisePrescription,
+  buildWeeklyExerciseSnapshot, archiveWeeklyExerciseSnapshot,
+  detectExercisePlateaus, generateLifecycleNotifications,
+  normalizeFoodScanResult, computeMacrosForGrams, convertEnergyValue,
+  getLocalDateKey, runDailyNutritionReset, reconcilePhysiqueNutritionTargets,
+  applyProtectedMacroSplit, buildScaledOfflineKurdishDiet,
+  findSingleMealReplacementCandidates, appendWeightLogEntry,
+  detectWeightPlateauAndAdaptiveTdee, calculateAdaptiveMacrosFromCalories,
+  calculateWorkoutBurnedCalories
 } from './utils/scientificEngine';
 import { TRANSLATIONS, FOOD_TRANSLATIONS, EXERCISE_TRANSLATIONS } from './utils/translations';
 
@@ -101,9 +111,24 @@ if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemI
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${fallbackKey}`;
       const parts = [{ text: prompt }];
-      if (base64Image) {
-        const data = base64Image.replace(/^data:image\/\w+;base64,/, '');
-        parts.push({ inlineData: { mimeType: 'image/jpeg', data } });
+      const extractMimeAndData = (raw) => {
+        const str = String(raw || '');
+        const match = str.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]*)$/);
+        if (match) return { mimeType: match[1].toLowerCase(), data: match[2] };
+        return { mimeType: 'image/jpeg', data: str.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '') };
+      };
+      const rawImages = Array.isArray(base64Image)
+        ? base64Image.filter(Boolean)
+        : (base64Image ? [base64Image] : []);
+      for (const imgItem of rawImages) {
+        if (typeof imgItem === 'string') {
+          const { mimeType, data } = extractMimeAndData(imgItem);
+          if (data) parts.push({ inlineData: { mimeType, data } });
+        } else if (imgItem && typeof imgItem === 'object' && imgItem.data) {
+          if (imgItem.label) parts.push({ text: imgItem.label });
+          const { mimeType, data } = extractMimeAndData(imgItem.data);
+          if (data) parts.push({ inlineData: { mimeType, data } });
+        }
       }
       const body = { contents: [{ role: 'user', parts }] };
       if (systemInstruction) {
@@ -146,7 +171,8 @@ if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemI
   }
 
   // Wave 3: Cloud AI Backup if all Google Gemini endpoints return 503 simultaneously (for text requests)
-  if (!base64Image) {
+  const hasAnyImage = Array.isArray(base64Image) ? base64Image.some(Boolean) : Boolean(base64Image);
+  if (!hasAnyImage) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 25000);
     try {
@@ -178,12 +204,59 @@ if (typeof window !== "undefined") window.callGeminiAPI = async (prompt, systemI
 
 if (typeof window !== "undefined") window.analyzeFoodDirectly = async (base64Image, query) => {
    const prompt = query ? 
-    `Analyze the food query: "${query}". Determine if it is a liquid/drink (isLiquid: true/false), its natural standard unit in Kurdish (e.g. "دانە" for fruits/eggs/burgers/bread, "قاپ" for rice/stews/dishes, "گڵاس" for milk/juice/drinks, "کەوچک" for oils/honey/sauces, "سکۆپ" for protein powders), and the exact weight/volume in grams or ml of 1 standard serving (standardWeight, e.g. 250 for pomegranate, 180 for apple, 55 for egg, 200 for plate of rice, 250 for glass of drink). Return JSON: {"isFood":true, "name":"Kurdish Name", "englishName":"English Name", "icon":"🍽️", "isLiquid":boolean, "standardUnit":"دانە|قاپ|گڵاس|کەوچک|سکۆپ", "standardWeight":number, "baseCalories":number, "baseProtein":number, "baseCarbs":number, "baseFat":number, "baseSugar":number}` :
-    `You are an expert clinical nutritionist with precision visual portion estimation. Analyze this food image carefully. If not edible food/drink, return JSON: {"isFood":false, "message":"ئەم وێنەیە خواردن نییە"}. If it is food or drink:
-1. Identify the exact food/meal or drink in Kurdish ("name") and English ("englishName").
-2. Estimate the EXACT total weight in grams (or volume in ml if liquid) visible in the image ("estimatedWeightGrams", e.g. 250g, 350g, etc.), plus its natural unit ("estimatedUnit": "قاپ", "دانە", "گڵاس", "کاسە") and count ("estimatedQty": 1, 2, etc.).
-3. Calculate BOTH the nutritional macros per 100g/100ml ("baseCalories", "baseProtein", "baseCarbs", "baseFat") AND the total macros for the entire scanned portion ("scannedCalories", "scannedProtein", "scannedCarbs", "scannedFat").
-Return JSON: {"isFood":true, "name":"Kurdish Name", "englishName":"English Name", "icon":"🍽️", "isLiquid":boolean, "estimatedUnit":"قاپ|دانە|گڵاس", "estimatedQty":number, "estimatedWeightGrams":number, "baseCalories":number, "baseProtein":number, "baseCarbs":number, "baseFat":number, "scannedCalories":number, "scannedProtein":number, "scannedCarbs":number, "scannedFat":number}`;
+    `Analyze the food query: "${query}". Determine if it is a liquid/drink (isLiquid: true/false), its natural standard unit in Kurdish (e.g. "دانە" for fruits/eggs/burgers/bread, "قاپ" for rice/stews/dishes, "گڵاس" for milk/juice/drinks, "کەوچک" for oils/honey/sauces, "سکۆپ" for protein powders), and the exact weight/volume in grams or ml of 1 standard serving (standardWeight, e.g. 250 for pomegranate, 180 for apple, 55 for egg, 200 for plate of rice, 250 for glass of drink). Provide exact USDA nutritional values PER 100g/100ml ("baseCalories", "baseProtein", "baseCarbs", "baseFat", "baseSugar"). Return ONLY JSON: {"isFood":true, "name":"Kurdish Name", "englishName":"English Name", "icon":"🍽️", "isLiquid":boolean, "standardUnit":"دانە|قاپ|گڵاس|کەوچک|سکۆپ", "standardWeight":number, "baseCalories":number, "baseProtein":number, "baseCarbs":number, "baseFat":number, "baseSugar":number}` :
+    `You are an expert clinical sports dietitian and precision visual portion estimator. Analyze this food image carefully.
+If the image does NOT contain edible food or drink, return ONLY JSON: {"isFood":false, "message":"ئەم وێنەیە خواردن نییە"}.
+
+If IT IS FOOD/DRINK:
+1. Use visual scale cues visible in the image (plate diameter ~24-28cm, bowl depth, spoon/fork/knife size, hand/knuckle scale, flatbread/samoon size, meat cut thickness, cooking oil sheen) to estimate accurate weights in grams (or ml if liquid) for EVERY distinct food item shown.
+2. Whether there is 1 single food OR multiple items on the plate (e.g., rice + grilled chicken breast + bean stew/salad), ALWAYS populate the "items" array with EACH detected food separately.
+3. For EACH item provide:
+   - "name": Kurdish Sorani name (e.g. "برنجی سپی کوردی")
+   - "englishName": English name
+   - "icon": single suitable food emoji
+   - "isLiquid": boolean
+   - "portionLabel": descriptive visual portion in Kurdish Sorani (e.g. "١ قاپ برنجی مامناوەند (~٢٢٠ گرام)" or "١ پارچە سنگی مریشک (~١٧٠ گرام)")
+   - "estimatedWeightGrams": integer visual gram/ml estimate
+   - "baseCaloriesPer100g": kcal per 100g/100ml
+   - "baseProteinPer100g": protein grams per 100g/100ml
+   - "baseCarbsPer100g": carb grams per 100g/100ml
+   - "baseFatPer100g": fat grams per 100g/100ml
+   - "totalCalories": Math.round(baseCaloriesPer100g * estimatedWeightGrams / 100)
+   - "totalProtein": protein for estimatedWeightGrams
+   - "totalCarbs": carbs for estimatedWeightGrams
+   - "totalFat": fat for estimatedWeightGrams
+4. Also include combined meal totals at top level ("mealName", "portionLabel", "totalWeightGrams", "totalCalories", "totalProtein", "totalCarbs", "totalFat").
+
+Return ONLY pure valid JSON:
+{
+  "isFood": true,
+  "mealName": "Kurdish Sorani name for the whole meal",
+  "portionLabel": "Concise visual scale summary in Kurdish Sorani",
+  "totalWeightGrams": number,
+  "totalCalories": number,
+  "totalProtein": number,
+  "totalCarbs": number,
+  "totalFat": number,
+  "items": [
+    {
+      "name": "Kurdish Sorani name",
+      "englishName": "English name",
+      "icon": "🍽️",
+      "isLiquid": false,
+      "portionLabel": "١ قاپ ... (~٢٢٠ گرام)",
+      "estimatedWeightGrams": 220,
+      "baseCaloriesPer100g": 130,
+      "baseProteinPer100g": 2.7,
+      "baseCarbsPer100g": 28,
+      "baseFatPer100g": 0.4,
+      "totalCalories": 286,
+      "totalProtein": 5.9,
+      "totalCarbs": 61.6,
+      "totalFat": 0.9
+    }
+  ]
+}`;
    const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.", null, base64Image, SCAN_GEMINI_MODELS);
    let parsed = null;
    try {
@@ -195,6 +268,9 @@ Return JSON: {"isFood":true, "name":"Kurdish Name", "englishName":"English Name"
      } catch (e2) {
        parsed = { isFood: false, message: "خواردنەکە نەناسرایەوە، تکایە دووبارە هەوڵبدەرەوە." };
      }
+   }
+   if (!query) {
+     return normalizeFoodScanResult(parsed);
    }
    if (parsed.isFood) {
      const toNum = (v, fallback = 0) => {
@@ -208,10 +284,10 @@ Return JSON: {"isFood":true, "name":"Kurdish Name", "englishName":"English Name"
        }
        return fallback;
      };
-     parsed.baseCalories = toNum(parsed.baseCalories, toNum(parsed.calories, 200));
-     parsed.baseProtein = toNum(parsed.baseProtein, toNum(parsed.proteinNum, toNum(parsed.protein, 10)));
-     parsed.baseCarbs = toNum(parsed.baseCarbs, toNum(parsed.carbsNum, toNum(parsed.carbs, 20)));
-     parsed.baseFat = toNum(parsed.baseFat, toNum(parsed.fatNum, toNum(parsed.fat, 5)));
+     parsed.baseCalories = toNum(parsed.baseCalories ?? parsed.baseCaloriesPer100g, toNum(parsed.calories, 200));
+     parsed.baseProtein = toNum(parsed.baseProtein ?? parsed.baseProteinPer100g, toNum(parsed.proteinNum, toNum(parsed.protein, 10)));
+     parsed.baseCarbs = toNum(parsed.baseCarbs ?? parsed.baseCarbsPer100g, toNum(parsed.carbsNum, toNum(parsed.carbs, 20)));
+     parsed.baseFat = toNum(parsed.baseFat ?? parsed.baseFatPer100g, toNum(parsed.fatNum, toNum(parsed.fat, 5)));
      parsed.baseSugar = toNum(parsed.baseSugar, toNum(parsed.sugarNum, toNum(parsed.sugar, 2)));
      parsed.standardWeight = toNum(parsed.standardWeight, toNum(parsed.estimatedWeightGrams, 150));
      parsed.estimatedWeightGrams = toNum(parsed.estimatedWeightGrams, parsed.standardWeight || 200);
@@ -231,35 +307,94 @@ if (typeof window !== "undefined") window.recommendDaysDirectly = async (profile
 if (typeof window !== "undefined") window.generatePlanDirectly = async (profile, dietType, goalCalories, lang = 'ku') => {
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani - کوردی سۆرانی)';
    const supplementsText = Array.isArray(profile?.supplements) && profile.supplements.length > 0 ? profile.supplements.join(', ') : 'None';
-   const prompt = `Generate a healthy 7-day diet plan strictly in ${langName} script matching approx ${goalCalories} kcal per day. Diet style: ${dietType}. Athlete weight: ${profile?.weight || 75}kg -> Target: ${profile?.targetWeight || 80}kg. Athlete supplements used: ${supplementsText} (if they use Whey Protein, Mass Gainer, Creatine, etc., integrate appropriate meals/shakes into their daily plan). All food names ("name") and units ("unit") MUST be written in ${langName} (NO Latin/English letters for Kurdish/Arabic/Persian). Use "مل" or "گڵاس" for liquids/drinks and "گرام", "قاپ", or "دانە" for solid foods. Also provide "englishName" in English. Return ONLY a JSON array of exactly 7 objects, each with breakfast, lunch, snack, dinner arrays of foods. Format of food: {id, name, englishName, calories, protein, carbs, fat, icon, quantity, unit}. DO NOT ADD MARKDOWN.`;
+   const excludedText = String(profile?.allergiesOrDislikes || '').trim() || 'None';
+   const targetProt = Number(profile?.goalProtein) || 150;
+   const targetCarb = Number(profile?.goalCarbs) || 220;
+   const targetFat = Number(profile?.goalFat) || 65;
+
+   const prompt = `Generate a healthy 7-day bodybuilding/fitness diet plan strictly in ${langName} script matching approx ${goalCalories} kcal/day (Target Macros: ~${targetProt}g Protein, ~${targetCarb}g Carbs, ~${targetFat}g Fat).
+Diet style: ${dietType}.
+Athlete weight: ${profile?.weight || 75}kg -> Target: ${profile?.targetWeight || 80}kg.
+Supplements: ${supplementsText} (if Whey Protein or Mass Gainer is listed, include shakes appropriately).
+STRICTLY EXCLUDED ALLERGIES / DISLIKED FOODS (DO NOT INCLUDE ANY OF THESE OR THEIR DERIVATIVES): ${excludedText}.
+LOCAL KURDISH/IRAQI FOOD PRIORITY: Prioritize everyday authentic Kurdish & Iraqi household staple foods (e.g. برنج، سنگی مریشک، هێلکەی کوڵاو، ماست، ساوار، فاسۆلیا، نانی تیری، گۆشتی سوور، نیسکێنە، پەتاتە، پەنیری سپی) rather than exotic expensive western dishes.
+All food names ("name") and units ("unit") MUST be written in ${langName}. Use "مل" or "گڵاس" for drinks and "گرام", "قاپ", "شیش", "نان", or "دانە" for solids. Also provide "englishName".
+Return ONLY a JSON array of exactly 7 objects, each with breakfast, lunch, snack, dinner arrays of foods: {id, name, englishName, calories, protein, carbs, fat, icon, quantity, unit}. DO NOT ADD MARKDOWN.`;
+   const resText = await window.callGeminiAPI(prompt);
+   return JSON.parse(cleanJsonText(resText));
+};
+
+if (typeof window !== "undefined") window.swapSingleMealDirectly = async (profile, mealType, targetCalories, targetProtein, currentItems = [], lang = 'ku') => {
+   const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani - کوردی سۆرانی)';
+   const currentText = (currentItems || []).map(i => i.name || i.englishName).join(', ') || 'None';
+   const excludedText = String(profile?.allergiesOrDislikes || '').trim() || 'None';
+   const prompt = `You are a Kurdish clinical sports dietitian. Replace ONLY ONE meal slot ("${mealType}") with a healthy everyday Kurdish/Iraqi meal alternative matching ~${targetCalories} kcal and ~${targetProtein}g protein.
+DO NOT repeat current foods: ${currentText}.
+STRICTLY EXCLUDE allergies/dislikes: ${excludedText}.
+Prioritize Kurdish/Iraqi household foods (برنج، سنگی مریشک، هێلکە، ماست، ساوار، فاسۆلیا، نانی تیری، گۆشتی سوور، نیسکێنە، پەتاتە).
+Return ONLY a JSON object (no markdown):
+{
+  "label": "Short meal title in ${langName}",
+  "items": [
+    { "name": "Kurdish name", "englishName": "English name", "calories": 320, "protein": 45, "carbs": 10, "fat": 8, "quantity": 180, "unit": "گرام" }
+  ]
+}`;
    const resText = await window.callGeminiAPI(prompt);
    return JSON.parse(cleanJsonText(resText));
 };
 
 if (typeof window !== "undefined") window.analyzePhysiqueDirectly = async (frontBase64, sideBase64, backBase64, profile = {}, lang = 'ku') => {
    const langName = lang === 'en' ? 'English' : lang === 'ar' ? 'Arabic' : lang === 'fa' ? 'Persian' : 'Kurdish (Sorani - کوردی سۆرانی)';
-   const athleteContext = `Athlete stats: Age: ${profile?.age || 23}, Gender: ${profile?.gender || 'male'}, Weight: ${profile?.weight || 75}kg, Height: ${profile?.height || 175}cm, Goal: ${profile?.goal || 'Fitness'}, Supplements: ${(profile?.supplements || []).join(', ') || 'None'}`;
-   
+   const athleteContext = `Athlete stats: Age: ${profile?.age || 23}, Gender: ${profile?.gender || 'male'}, Weight: ${profile?.weight || 75}kg, Height: ${profile?.height || 175}cm, Experience Level: ${profile?.experienceLevel || 'intermediate'}, Goal: ${profile?.goal || 'Fitness'}, Supplements: ${(profile?.supplements || []).join(', ') || 'None'}`;
+
+   const imageParts = [];
+   const providedAngles = [];
+   if (frontBase64) {
+     providedAngles.push('FRONT POSE');
+     imageParts.push({
+       label: 'ANGLE 1 - FRONT POSE: Examine chest development, anterior/lateral deltoids, arms, core/abs, quadriceps balance, and frontal left-right symmetry.',
+       data: frontBase64
+     });
+   }
+   if (sideBase64) {
+     providedAngles.push('SIDE PROFILE');
+     imageParts.push({
+       label: 'ANGLE 2 - SIDE PROFILE: Examine spinal posture (kyphosis, lordosis, forward head), rounded shoulders, chest depth, triceps/hamstring tie-in, and midsection protrusion.',
+       data: sideBase64
+     });
+   }
+   if (backBase64) {
+     providedAngles.push('BACK POSE');
+     imageParts.push({
+       label: 'ANGLE 3 - BACK POSE: Examine lat width, mid-back/rhomboid/trap thickness, rear deltoids, lower back, glutes, hamstrings, calves, and posterior left-right symmetry.',
+       data: backBase64
+     });
+   }
+
    const prompt = `You are a world-class elite sports kinesiologist, physique evaluator, and competitive bodybuilding coach.
-Carefully examine the athlete's physique image(s) (Front pose, Side profile, and Back pose). Note: Face may be concealed for privacy.
+Carefully examine ALL ${imageParts.length} attached athlete physique image(s) (${providedAngles.join(', ') || 'Physique photo'}). Note: Face may be concealed for privacy.
 ${athleteContext}
 
-Analyze the physique visually with scientific rigor and return a JSON object with:
-1. "bodyFatPercentage": (number, realistic visual estimation based on definition, e.g. 15.5)
+Evaluate posture, back width/thickness, leg development (quads, hamstrings, calves, glutes), upper-lower proportion, and full-body symmetry across every provided angle and return a JSON object with:
+1. "bodyFatPercentage": (number, realistic visual estimation based on definition across all angles, e.g. 15.5)
 2. "bodyType": (string in ${langName}, e.g. "مێزۆمۆرف (وەرزشی)" or "ئیکتۆمۆرف (باریک)" or "ئیندۆمۆرف (پڕ)")
-3. "muscleMassLevel": (string in ${langName}, assessment of muscular development)
-4. "laggingMuscles": (array of 2 to 4 muscle groups in ${langName} that visibly lag behind and need extra volume/development, e.g. ["سینگی سەرەوە (Incline Chest)", "شانی لاوەکی (Lateral Delts)", "پشتی فراوان (Lats Width)", "ماسولکەکانی ورگ و کۆڕ (Core/Abs)"])
+3. "muscleMassLevel": (string in ${langName}, comprehensive assessment of upper, back, and lower muscular development)
+4. "laggingMuscles": (array of 2 to 4 muscle groups in ${langName} visibly lagging across Front, Side, and Back poses that need extra volume, e.g. ["سینگی سەرەوە (Incline Chest)", "پشتی فراوان (Lats Width)", "پشتی ڕان و قاچ (Hamstrings & Legs)"])
 5. "strongMuscles": (array of 2 to 3 well-developed muscle groups in ${langName})
-6. "postureFeedback": (string in ${langName}, 1-2 sentences on symmetry, balance, and posture)
+6. "postureFeedback": (string in ${langName}, 2 sentences covering spinal posture alignment, back width/thickness, leg development, and overall symmetry)
 7. "recommendedCalories": (number, scientifically calibrated target daily calories for their visual body fat and goal)
 8. "recommendedProtein": (number, daily protein in grams, e.g. 160)
-9. "workoutFocusText": (string in ${langName}, 1-2 sentences detailing how their workout course should prioritize their lagging muscles)
+9. "workoutFocusText": (string in ${langName}, 1-2 sentences detailing how their workout course should prioritize lagging areas and posture corrections)
 
 RESPOND ONLY IN PURE VALID JSON. NO MARKDOWN, NO EXPLANATIONS.`;
 
-   const primaryImage = frontBase64 || sideBase64 || backBase64;
-   const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.", null, primaryImage, SCAN_GEMINI_MODELS);
-   return JSON.parse(cleanJsonText(resText));
+   const resText = await window.callGeminiAPI(prompt + "\nRESPOND ONLY IN PURE VALID JSON. NO MARKDOWN.", null, imageParts, SCAN_GEMINI_MODELS);
+   const cleaned = cleanJsonText(resText);
+   try {
+     return JSON.parse(cleaned);
+   } catch {
+     return JSON.parse(cleanJsonText(String(resText || '').replace(/[\r\n]+/g, ' ')));
+   }
 };
 
 // Modular components imported from ./utils/scientificEngine and ./components/Icons
@@ -400,6 +535,16 @@ export default function App() {
         localStorage.removeItem('app_profile');
         localStorage.removeItem('app_diet_meals');
         localStorage.removeItem('app_completed_day_indices');
+        localStorage.removeItem('app_completed_days_manual_v5');
+        localStorage.removeItem('app_current_workout_week');
+        localStorage.removeItem('app_deload_weeks');
+        localStorage.removeItem('app_exercise_log_history');
+        localStorage.removeItem('app_dismissed_renewal_courses');
+        localStorage.removeItem('app_read_notification_ids');
+        localStorage.removeItem('app_nutrition_history');
+        localStorage.removeItem('app_nutrition_date_key');
+        localStorage.removeItem('app_weight_history');
+        localStorage.removeItem('app_dismissed_adaptive_banner');
         localStorage.removeItem('app_ai_custom_foods');
         localStorage.removeItem('app_chat_messages');
         localStorage.removeItem('app_coach_memory');
@@ -480,9 +625,6 @@ export default function App() {
   const [settingsMacroFormula, setSettingsMacroFormula] = useState(() => {
     try { return (typeof window !== 'undefined' && localStorage.getItem('app_macro_formula')) || 'high_protein'; } catch (e) { return 'high_protein'; }
   });
-  const [settingsWorkoutLocation, setSettingsWorkoutLocation] = useState(() => {
-    try { return (typeof window !== 'undefined' && localStorage.getItem('app_preferred_location')) || 'gym'; } catch (e) { return 'gym'; }
-  });
   const [settingsCustomApiKey, setSettingsCustomApiKey] = useState(() => {
     try { return (typeof window !== 'undefined' && localStorage.getItem('custom_gemini_api_key')) || ''; } catch (e) { return ''; }
   });
@@ -490,6 +632,41 @@ export default function App() {
   const [syncFeedbackMsg, setSyncFeedbackMsg] = useState('');
   const [cacheClearMsg, setCacheClearMsg] = useState('');
   const [appUpdateCheckState, setAppUpdateCheckState] = useState('idle');
+
+  // مێژووی ڕۆژانەی خواردن و کێش، گۆڕینی یەک ژەم و مۆداڵی سکانی کامێرا
+  const [nutritionHistory, setNutritionHistory] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('app_nutrition_history');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [weightHistory, setWeightHistory] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('app_weight_history');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [dismissedAdaptiveDate, setDismissedAdaptiveDate] = useState(() => {
+    try { return (typeof window !== 'undefined' && localStorage.getItem('app_dismissed_adaptive_banner')) || ''; } catch (e) { return ''; }
+  });
+  const [quickWeightInput, setQuickWeightInput] = useState('');
+  const [swapMealModalData, setSwapMealModalData] = useState(null); // { mealType, dayIdx, currentItems, targetCalories, targetProtein }
+  const [isAiSwappingMeal, setIsAiSwappingMeal] = useState(false);
+  const [aiSwappedMealCandidate, setAiSwappedMealCandidate] = useState(null);
+  const [scannedFoodReviewModal, setScannedFoodReviewModal] = useState(null);
+  const [scannedMealTarget, setScannedMealTarget] = useState('lunch');
 
   const triggerHapticFeedback = (pattern = 18) => {
     if (!settingsHaptics || typeof navigator === 'undefined') return;
@@ -501,22 +678,13 @@ export default function App() {
   };
 
   const applyMacroFormulaSetting = (formulaId) => {
-    const splits = {
-      high_protein: { c: 0.40, p: 0.30, f: 0.30 },
-      bulking: { c: 0.50, p: 0.25, f: 0.25 },
-      cutting: { c: 0.35, p: 0.40, f: 0.25 },
-      balanced: { c: 0.45, p: 0.25, f: 0.30 }
-    };
-    const ratio = splits[formulaId] || splits.balanced;
     setSettingsMacroFormula(formulaId);
     try { localStorage.setItem('app_macro_formula', formulaId); } catch (e) {}
     setProfile(prev => {
-      const cals = Number(prev?.goalCalories) || 2200;
+      const protectedMacros = applyProtectedMacroSplit(prev, formulaId);
       const updated = {
         ...prev,
-        goalCarbs: Math.max(50, Math.round((cals * ratio.c) / 4)),
-        goalProtein: Math.max(50, Math.round((cals * ratio.p) / 4)),
-        goalFat: Math.max(25, Math.round((cals * ratio.f) / 9))
+        ...protectedMacros
       };
       try { localStorage.setItem('app_profile', JSON.stringify(updated)); } catch (e) {}
       return updated;
@@ -534,7 +702,11 @@ export default function App() {
         profile,
         workoutCourse,
         courseHistory,
+        deloadWeeks,
+        exerciseLogHistory,
         dietMeals,
+        nutritionHistory,
+        weightHistory,
         exerciseLogs,
         waterMl,
         completedDayIndices,
@@ -623,16 +795,34 @@ export default function App() {
             try { localStorage.setItem('app_profile', JSON.stringify(data.profile)); } catch (err) {}
           }
           if (data.workoutCourse !== undefined) {
-            setWorkoutCourse(data.workoutCourse);
-            try { localStorage.setItem('app_workout_course', JSON.stringify(data.workoutCourse)); } catch (err) {}
+            const migratedCourse = data.workoutCourse ? ensureCourseStartDate(data.workoutCourse) : null;
+            setWorkoutCourse(migratedCourse);
+            try { localStorage.setItem('app_workout_course', JSON.stringify(migratedCourse)); } catch (err) {}
           }
           if (Array.isArray(data.courseHistory)) {
-            setCourseHistory(data.courseHistory);
-            try { localStorage.setItem('app_course_history', JSON.stringify(data.courseHistory)); } catch (err) {}
+            const normalizedHist = normalizeCourseHistoryList(data.courseHistory);
+            setCourseHistory(normalizedHist);
+            try { localStorage.setItem('app_course_history', JSON.stringify(normalizedHist)); } catch (err) {}
+          }
+          if (data.deloadWeeks && typeof data.deloadWeeks === 'object') {
+            setDeloadWeeks(data.deloadWeeks);
+            try { localStorage.setItem('app_deload_weeks', JSON.stringify(data.deloadWeeks)); } catch (err) {}
+          }
+          if (Array.isArray(data.exerciseLogHistory)) {
+            setExerciseLogHistory(data.exerciseLogHistory);
+            try { localStorage.setItem('app_exercise_log_history', JSON.stringify(data.exerciseLogHistory)); } catch (err) {}
           }
           if (data.dietMeals) {
             setDietMeals(data.dietMeals);
             try { localStorage.setItem('app_diet_meals', JSON.stringify(data.dietMeals)); } catch (err) {}
+          }
+          if (Array.isArray(data.nutritionHistory)) {
+            setNutritionHistory(data.nutritionHistory);
+            try { localStorage.setItem('app_nutrition_history', JSON.stringify(data.nutritionHistory)); } catch (err) {}
+          }
+          if (Array.isArray(data.weightHistory)) {
+            setWeightHistory(data.weightHistory);
+            try { localStorage.setItem('app_weight_history', JSON.stringify(data.weightHistory)); } catch (err) {}
           }
           if (data.exerciseLogs) {
             setExerciseLogs(data.exerciseLogs);
@@ -750,8 +940,12 @@ export default function App() {
         isSuspended: isAppSuspended,
         status: isAppSuspended ? 'suspended' : 'active',
         dietMeals,
+        nutritionHistory,
+        weightHistory,
         workoutCourse,
-        courseHistory: (courseHistory || []).filter(c => c !== null),
+        courseHistory: normalizeCourseHistoryList(courseHistory),
+        deloadWeeks,
+        exerciseLogHistory,
         coachMemory,
         hasCompletedOnboarding,
         chatMessages,
@@ -769,8 +963,9 @@ export default function App() {
       if (snap.exists()) {
         const cloudData = snap.data();
         if (cloudData.updatedWorkoutCourse) {
-          setWorkoutCourse(cloudData.updatedWorkoutCourse);
-          try { localStorage.setItem('app_workout_course', JSON.stringify(cloudData.updatedWorkoutCourse)); } catch (e) {}
+          const syncedCourse = ensureCourseStartDate(cloudData.updatedWorkoutCourse);
+          setWorkoutCourse(syncedCourse);
+          try { localStorage.setItem('app_workout_course', JSON.stringify(syncedCourse)); } catch (e) {}
         }
       }
       if (typeof playSparkleSound === 'function') playSparkleSound();
@@ -899,13 +1094,8 @@ export default function App() {
     }
   };
 
-  // ئاگادارییەکان
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'کاتی ڕاهێنانی ئەمڕۆیە!', desc: 'کۆرسی هایپەرتڕۆفی ڕۆژی سنگ و سێ سەر ئامادەیە.', time: 'پێش ١٥ خولەک', unread: true, icon: <><Dumbbell size={16} className="inline-block" /></> },
-    { id: 2, title: 'ئاو خواردنەوە', desc: 'ئامانجی ئەمڕۆ ٣٠٠٠ مللە، تا ئێستا ١٦٠٠ مللت خواردووەتەوە.', time: 'پێش ١ کاتژمێر', unread: true, icon: <><Droplet size={16} className="inline-block" /></> },
-    { id: 3, title: 'کالۆری و خۆراک', desc: 'تەنها ٦٩٠ کالۆری ماوە بۆ تەواوکردنی ئامانجی ڕۆژانەت.', time: 'پێش ٣ کاتژمێر', unread: false, icon: <><Target size={16} className="inline-block" color="var(--text-main)" /></> },
-    { id: 4, title: 'بەردەوامی هەفتانە', desc: '٧ ڕۆژە بە بەردەوامی خۆراکەکانت تۆمار دەکەیت.', time: 'دوێنێ', unread: false, icon: <><Trophy size={16} className="inline-block" /></> }
-  ]);
+  // ئاگادارییە دینامیکییەکان (خوێندنەوە و لابردنی نیشانە تۆمار دەکرێت)
+  const [readNotificationIds, setReadNotificationIds] = useState([]);
 
   const [theme, setTheme] = useState('dark');
   const [colorTheme, setColorTheme] = useState('system');
@@ -1031,6 +1221,76 @@ export default function App() {
     if (lang === 'ar') return 'عادي (متوازن)';
     if (lang === 'fa') return 'معمولی (متعادل)';
     return 'ئاسایی (هاوسەنگ)';
+  };
+
+  const getExperienceOptions = (lang = language) => [
+    {
+      id: 'beginner',
+      emoji: '🌱',
+      title: lang === 'en' ? 'Beginner' : lang === 'ar' ? 'مبتدئ' : lang === 'fa' ? 'مبتدی' : 'سەرەتایی',
+      years: lang === 'en' ? '<1 yr' : lang === 'ar' ? '<١ سنة' : lang === 'fa' ? '<۱ سال' : '<١ ساڵ',
+      setsRir: lang === 'en' ? '8–10 sets • RIR 2-3' : '٨–١٠ سێت • RIR 2-3'
+    },
+    {
+      id: 'intermediate',
+      emoji: '💪',
+      title: lang === 'en' ? 'Intermediate' : lang === 'ar' ? 'متوسط' : lang === 'fa' ? 'متوسط' : 'ناوەند',
+      years: lang === 'en' ? '1–3 yrs' : lang === 'ar' ? '١–٣ سنوات' : lang === 'fa' ? '۱–۳ سال' : '١–٣ ساڵ',
+      setsRir: lang === 'en' ? '12–16 sets • RIR 1-2' : '١٢–١٦ سێت • RIR 1-2'
+    },
+    {
+      id: 'advanced',
+      emoji: '🔥',
+      title: lang === 'en' ? 'Advanced' : lang === 'ar' ? 'متقدم' : lang === 'fa' ? 'پیشرفته' : 'پێشکەوتوو',
+      years: lang === 'en' ? '3+ yrs' : lang === 'ar' ? '+٣ سنوات' : lang === 'fa' ? '+۳ سال' : '+٣ ساڵ',
+      setsRir: lang === 'en' ? '16–20 sets • RIR 0-1' : '١٦–٢٠ سێت • RIR 0-1'
+    }
+  ];
+
+  const getLocalizedExperience = (expCode, lang = language) => {
+    const code = (expCode || 'intermediate').toLowerCase();
+    const found = getExperienceOptions(lang).find(o => o.id === code) || getExperienceOptions(lang)[1];
+    return `${found.title} (${found.years})`;
+  };
+
+  const renderExperienceSelector = (selectedValue, onSelect, labelOverride = null) => {
+    const activeVal = selectedValue || 'intermediate';
+    const label = labelOverride || (language === 'en' ? 'Experience Level (Training Age)' : language === 'ar' ? 'مستوى الخبرة التدريبية' : language === 'fa' ? 'سطح تجربه تمرینی' : 'ئاستی ئەزموونی وەرزشی (Training Age)');
+    return (
+      <div>
+        <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', fontWeight: '800', marginBottom: '6px' }}>{label}:</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+          {getExperienceOptions(language).map(opt => {
+            const isSel = activeVal === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => onSelect(opt.id)}
+                className="liquid-pill"
+                style={{
+                  padding: '9px 6px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '2px',
+                  border: isSel ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: isSel ? 'var(--accent-gradient)' : 'var(--card-subtle)',
+                  color: isSel ? '#ffffff' : 'var(--text-main)',
+                  boxShadow: isSel ? '0 4px 14px var(--accent-glow)' : 'none'
+                }}
+              >
+                <span style={{ fontSize: '12px', fontWeight: '900', lineHeight: '1.2' }}>{opt.emoji} {opt.title}</span>
+                <span style={{ fontSize: '10px', fontWeight: '700', opacity: isSel ? 0.92 : 0.72 }}>{opt.years}</span>
+                <span style={{ fontSize: '9px', fontWeight: '700', opacity: isSel ? 0.9 : 0.65 }}>{opt.setsRir}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const getLocalizedAthleteName = (name, lang = language) => {
@@ -1350,6 +1610,9 @@ export default function App() {
 
   const getExerciseEnglishName = (ex) => {
     if (!ex) return 'Gym Workout';
+    if (ex.canonicalName && typeof ex.canonicalName === 'string' && ex.canonicalName.trim()) {
+      return ex.canonicalName.trim();
+    }
     if (ex.englishName && typeof ex.englishName === 'string' && ex.englishName.trim()) {
       return ex.englishName.trim();
     }
@@ -1365,46 +1628,43 @@ export default function App() {
     if (lower.includes('سکوات') || lower.includes('squat')) {
       if (lower.includes('دەمبڵ') || lower.includes('goblet')) return 'Goblet Squat';
       if (lower.includes('باربێڵ') || lower.includes('شان') || lower.includes('back')) return 'Barbell Back Squat';
-      return 'Squat';
+      if (lower.includes('کێشی') || lower.includes('bodyweight')) return 'Bodyweight Squats';
+      return 'Barbell Back Squat';
     }
     if (lower.includes('قاچ پرێس') || lower.includes('leg press')) return 'Leg Press';
     if (lower.includes('هەنگاونان') || lower.includes('lunge')) return 'Dumbbell Lunges';
     if (lower.includes('دێدلیفت') || lower.includes('deadlift')) {
       if (lower.includes('ڕۆمانیەن') || lower.includes('romanian')) return 'Romanian Deadlift';
-      return 'Deadlift';
+      return 'Barbell Deadlift';
     }
-    if (lower.includes('سنگ') || lower.includes('chest') || lower.includes('bench')) {
+    if (lower.includes('فڕین') || lower.includes('fly')) return 'Cable Chest Fly';
+    if (lower.includes('شناو') || lower.includes('push-up')) return 'Push-ups';
+    if (lower.includes('بێنچ') || lower.includes('bench press')) {
       if (lower.includes('لار') || lower.includes('incline')) return 'Incline Dumbbell Bench Press';
-      if (lower.includes('فڕین') || lower.includes('fly')) return 'Cable Chest Fly';
-      if (lower.includes('شناو') || lower.includes('push-up')) return 'Push-ups';
       return 'Dumbbell Bench Press';
     }
-    if (lower.includes('شان') || lower.includes('shoulder')) {
-      if (lower.includes('تەنیشت') || lower.includes('lateral')) return 'Cable Lateral Raise';
-      if (lower.includes('پشت') || lower.includes('face pull')) return 'Cable Face Pull';
-      return 'Dumbbell Shoulder Press';
+    if (lower.includes('فەیس') || lower.includes('face pull')) return 'Cable Face Pull';
+    if (lower.includes('تەنیشت') || lower.includes('lateral raise')) return 'Cable Lateral Raise';
+    if (lower.includes('شۆڵدەر پرێس') || lower.includes('شان پرێس') || lower.includes('shoulder press')) return 'Dumbbell Shoulder Press';
+    if (lower.includes('پولداون') || lower.includes('pulldown')) return 'Lat Pulldown Wide Grip';
+    if (lower.includes('پاروو') || lower.includes('row')) {
+      if (lower.includes('کێبڵ') || lower.includes('cable')) return 'Seated Cable Row';
+      if (lower.includes('ئامێر') || lower.includes('machine')) return 'Chest-Supported Machine Row';
+      return 'Single Arm Dumbbell Row';
     }
-    if (lower.includes('پشت') || lower.includes('back') || lower.includes('lat') || lower.includes('پاروو') || lower.includes('row')) {
-      if (lower.includes('کێبڵ') || lower.includes('pulldown')) return 'Lat Pulldown Wide Grip';
-      if (lower.includes('پاروو') || lower.includes('row')) return 'Single Arm Dumbbell Row';
-      return 'Lat Pulldown';
-    }
-    if (lower.includes('بایسێپس') || lower.includes('قۆڵ دووسەر') || lower.includes('bicep')) {
-      if (lower.includes('هامر') || lower.includes('hammer')) return 'Dumbbell Hammer Curl';
-      return 'Dumbbell Bicep Curl';
-    }
-    if (lower.includes('ترایسێپس') || lower.includes('پاشەملە') || lower.includes('tricep')) {
-      if (lower.includes('پەت') || lower.includes('rope') || lower.includes('کێبڵ')) return 'Triceps Rope Pushdown';
-      return 'Dumbbell Triceps Extension';
-    }
-    if (lower.includes('سک') || lower.includes('پلانک') || lower.includes('plank') || lower.includes('abs')) return 'Scientific Plank Hold';
+    if (lower.includes('هامر') || lower.includes('hammer')) return 'Dumbbell Hammer Curl';
+    if (lower.includes('پریچەر') || lower.includes('preacher')) return 'Barbell Preacher Curl';
+    if (lower.includes('بایسێپس') || lower.includes('بایسپس') || lower.includes('bicep curl')) return 'Dumbbell Bicep Curl';
+    if (lower.includes('ترایسێپس') && (lower.includes('پەت') || lower.includes('rope') || lower.includes('pushdown'))) return 'Triceps Rope Pushdown';
+    if (lower.includes('پلانک') || lower.includes('plank')) return 'Plank Hold';
+    if (lower.includes('کڕانچ') || lower.includes('کرەنچ') || lower.includes('crunch')) return 'Crunches';
     if (lower.includes('پوز') || lower.includes('سۆڵە') || lower.includes('calf')) return 'Standing Calf Raise';
     if (lower.includes('پشتی قاچ') || lower.includes('leg curl')) return 'Seated Leg Curl';
-    if (lower.includes('لێگ ئێکس تێنشن') || lower.includes('چوار سەر')) return 'Leg Extension Machine';
+    if (lower.includes('لێگ ئێکس تێنشن') || lower.includes('leg extension')) return 'Leg Extension Machine';
 
-    const latinOnly = rawName.replace(/[^a-zA-Z\s]/g, '').trim();
+    const latinOnly = rawName.replace(/[^a-zA-Z\s-]/g, '').trim();
     if (latinOnly.length > 2) return latinOnly;
-    return 'Workout Form Exercise';
+    return '';
   };
 
   const getExerciseFormGuidelines = (ex, lang = 'ku') => {
@@ -1729,6 +1989,7 @@ export default function App() {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (!Array.isArray(parsed.supplements)) parsed.supplements = [];
+          if (typeof parsed.allergiesOrDislikes !== 'string') parsed.allergiesOrDislikes = '';
           return parsed;
         }
       }
@@ -1745,7 +2006,9 @@ export default function App() {
       trainingLocation: 'gym',
       height: 178,
       activityLevel: 'active',
+      experienceLevel: 'intermediate',
       goal: 'گەشەی ماسولکە',
+      allergiesOrDislikes: '',
       healthConditions: [],
       supplements: []
     };
@@ -1769,6 +2032,7 @@ export default function App() {
     weight: '',
     targetWeight: '',
     goal: 'دابەزاندنی کێش',
+    experienceLevel: 'beginner',
     healthConditions: [],
     usesSupplements: null,
     supplements: []
@@ -1812,21 +2076,11 @@ export default function App() {
       },
       lastPhysiqueScan: new Date().toLocaleDateString()
     };
-    const finalProfile = analysisResult.recommendedCalories
-      ? {
-          ...updatedProfile,
-          goalCalories: analysisResult.recommendedCalories,
-          goalProtein: analysisResult.recommendedProtein || updatedProfile.goalProtein,
-          goalCarbs: Math.max(
-            50,
-            Math.round(
-              (Number(analysisResult.recommendedCalories) -
-                ((Number(analysisResult.recommendedProtein) || updatedProfile.goalProtein || 150) * 4) -
-                ((Number(updatedProfile.goalFat) || 65) * 9)) / 4
-            )
-          )
-        }
-      : updatedProfile;
+    const reconciledMacros = reconcilePhysiqueNutritionTargets(updatedProfile, analysisResult);
+    const finalProfile = {
+      ...updatedProfile,
+      ...reconciledMacros
+    };
 
     setProfile(finalProfile);
 
@@ -1838,9 +2092,12 @@ export default function App() {
       try {
         setActionLoadingState({ active: true, message: 'خەریکی داڕشتنەوەی کۆرسی ڕاهێنانە بەپێی ماسولکە لاوازەکانی لەشت...' });
         const currentDays = workoutCourse?.weeklyPlan?.length || 4;
-        const newCourse = await window.generateWorkoutDirectly(updatedProfile, currentDays, workoutCourse?.location || 'gym', language);
+        const loc = workoutCourse?.trainingLocation || workoutCourse?.location || finalProfile?.trainingLocation || 'gym';
+        const eq = workoutCourse?.homeEquipment || finalProfile?.homeEquipment || '';
+        const newCourse = await window.generateWorkoutDirectly(finalProfile, currentDays, loc, eq, language);
         if (newCourse && newCourse.weeklyPlan) {
-          setWorkoutCourse(newCourse);
+          const cleanNew = sanitizeWorkoutPlan(newCourse, loc, eq, finalProfile?.healthConditions || [], language, finalProfile?.weight);
+          activateNewWorkoutCourse(cleanNew);
         }
       } catch (err) {
         console.warn("Failed to auto-regenerate course after physique scan:", err);
@@ -1851,34 +2108,59 @@ export default function App() {
     playSparkleSound();
   };
 
-  // دۆخی کیبۆردی مۆبایل بۆ ڕاهێنەری زیرەک و شاردنەوەی هێڵی خوارەوە
+  // دۆخی کیبۆردی مۆبایل بۆ ڕاهێنەری زیرەک و قوفڵکردنی بەرزی نێوان کیبۆرد و سەردێڕ (visualViewport)
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [isChatInputFocused, setIsChatInputFocused] = useState(false);
   const [visualViewportStyle, setVisualViewportStyle] = useState(null);
+  const syncViewportRef = useRef(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
+    if (typeof window === 'undefined') return;
     const vv = window.visualViewport;
-    let maxHeight = window.innerHeight || vv.height;
+    let lastWidth = window.innerWidth;
+    let maxFullHeight = Math.max(window.innerHeight || 0, vv ? vv.height : 0);
 
     const handleViewportChange = () => {
-      const currentH = vv.height;
-      const fullH = Math.max(window.innerHeight || currentH, maxHeight);
-      if (currentH > maxHeight) maxHeight = currentH;
-      const kbOpen = (fullH - currentH) > 110;
+      if (!vv) {
+        setVisualViewportStyle({ height: window.innerHeight, top: 0 });
+        return;
+      }
+      const curW = window.innerWidth;
+      const currentH = Math.round(vv.height);
+      const curInnerH = window.innerHeight || currentH;
+
+      if (Math.abs(curW - lastWidth) > 20) {
+        lastWidth = curW;
+        maxFullHeight = Math.max(curInnerH, currentH);
+      } else {
+        maxFullHeight = Math.max(maxFullHeight, curInnerH, currentH);
+      }
+
+      const activeTag = typeof document !== 'undefined' ? document.activeElement?.tagName : '';
+      const hasFocusedInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      const kbOpen = hasFocusedInput && (maxFullHeight - currentH) > 100;
       setIsKeyboardOpen(kbOpen);
+
+      if (kbOpen && window.scrollY > 0) {
+        try { window.scrollTo(0, 0); } catch {}
+      }
+
       setVisualViewportStyle({
-        height: `${Math.round(currentH)}px`,
-        top: `${Math.round(vv.offsetTop)}px`
+        height: currentH,
+        top: Math.max(0, Math.round(vv.offsetTop))
       });
     };
 
-    vv.addEventListener('resize', handleViewportChange);
-    vv.addEventListener('scroll', handleViewportChange);
+    syncViewportRef.current = handleViewportChange;
     handleViewportChange();
+    vv?.addEventListener('resize', handleViewportChange);
+    vv?.addEventListener('scroll', handleViewportChange);
+    window.addEventListener('resize', handleViewportChange);
     return () => {
-      vv.removeEventListener('resize', handleViewportChange);
-      vv.removeEventListener('scroll', handleViewportChange);
+      syncViewportRef.current = null;
+      vv?.removeEventListener('resize', handleViewportChange);
+      vv?.removeEventListener('scroll', handleViewportChange);
+      window.removeEventListener('resize', handleViewportChange);
     };
   }, []);
 
@@ -1888,7 +2170,7 @@ export default function App() {
   const [pickerYear, setPickerYear] = useState(2000);
 
   const [newConditionInput, setNewConditionInput] = useState('');
-  const [waterMl, setWaterMl] = useState(1600);
+  const [waterMl, setWaterMl] = useState(0);
 
   const handleAddWater = (amount) => {
     setWaterMl(prev => Math.max(0, prev + amount));
@@ -1941,23 +2223,34 @@ export default function App() {
   const [isGeneratingAiCourse, setIsGeneratingAiCourse] = useState(false);
   const [courseBuilderStep, setCourseBuilderStep] = useState(1);
   const [editFormData, setEditFormData] = useState({ ...profile });
-  const [goalFormData, setGoalFormData] = useState({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } });
+  const [goalFormData, setGoalFormData] = useState({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', experienceLevel: profile.experienceLevel || 'intermediate', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } });
   const [aiDaysRecommendation, setAiDaysRecommendation] = useState({ days: 4, text: 'خەریکی شیکارکردنە بە یارمەتی زیرەکی دەستکرد...', loading: true });
 
   const [workoutCourse, setWorkoutCourse] = useState(null);
-  const [courseHistory, setCourseHistory] = useState([workoutCourse]);
+  const [courseHistory, setCourseHistory] = useState([]);
   const [showCourseHistory, setShowCourseHistory] = useState(false);
+  const [expandedHistoryCourseIdx, setExpandedHistoryCourseIdx] = useState(null);
+  const [historyDeleteConfirmIdx, setHistoryDeleteConfirmIdx] = useState(null);
+  const [deloadWeeks, setDeloadWeeks] = useState({});
+  const [exerciseLogHistory, setExerciseLogHistory] = useState([]);
+  const [dismissedRenewalCourses, setDismissedRenewalCourses] = useState({});
+  const hasHydratedCourseStateRef = useRef(false);
   const [showOverloadGuide, setShowOverloadGuide] = useState(false);
-  const [atlasLocationFilter, setAtlasLocationFilter] = useState('gym'); // 'gym' | 'home'
+  const [showCommercialMapModal, setShowCommercialMapModal] = useState(false);
 
-  // پشکنین و پاکسازی خۆکاری کۆرس لە هەر ئامێر و جووڵەیەکی نادروست بەپێی شوێن و کەرەستە
+  // پشکنین و پاکسازی خۆکاری کۆرس لە هەر ئامێر و جووڵەیەکی نادروست بەپێی شوێن، کەرەستە و پێکان
   useEffect(() => {
     if (workoutCourse && Array.isArray(workoutCourse.weeklyPlan)) {
       const isHome = (workoutCourse.trainingLocation === 'home') || (workoutCourse.location === 'home') || (profile?.trainingLocation === 'home');
       const eq = (workoutCourse.homeEquipment || profile?.homeEquipment || '').toLowerCase();
       
-      const sanitized = sanitizeWorkoutPlan(JSON.parse(JSON.stringify(workoutCourse)), isHome ? 'home' : 'gym', eq);
-      if (JSON.stringify(sanitized.weeklyPlan) !== JSON.stringify(workoutCourse.weeklyPlan)) {
+      const sanitized = ensureCourseStartDate(
+        sanitizeWorkoutPlan(JSON.parse(JSON.stringify(workoutCourse)), isHome ? 'home' : 'gym', eq, profile?.healthConditions || [], language, profile?.weight)
+      );
+      if (
+        JSON.stringify(sanitized.weeklyPlan) !== JSON.stringify(workoutCourse.weeklyPlan) ||
+        sanitized.startDate !== workoutCourse.startDate
+      ) {
         setWorkoutCourse(sanitized);
         try {
           localStorage.setItem('app_workout_course', JSON.stringify(sanitized));
@@ -1965,7 +2258,59 @@ export default function App() {
         } catch (e) {}
       }
     }
-  }, [workoutCourse, profile]);
+  }, [workoutCourse, profile, language]);
+
+  // جێبەجێکردنی ڕیسێتی ڕۆژانەی خواردن و ئاو لە کاتی گۆڕانی بەروار و ئەرشیفکردن لە مێژووی ٣٠ ڕۆژەدا
+  const checkAndApplyDailyNutritionReset = () => {
+    try {
+      if (typeof window === 'undefined') return;
+      const todayKey = getLocalDateKey();
+      const savedDateKey = localStorage.getItem('app_nutrition_date_key');
+      const rawDiet = localStorage.getItem('app_diet_meals');
+      const rawWater = localStorage.getItem('app_water_ml');
+      const rawHistory = localStorage.getItem('app_nutrition_history');
+      const rawProfile = localStorage.getItem('app_profile');
+
+      let parsedDiet = null;
+      try { parsedDiet = rawDiet ? JSON.parse(rawDiet) : null; } catch (e) {}
+      let parsedHistory = [];
+      try { parsedHistory = rawHistory ? JSON.parse(rawHistory) : []; } catch (e) {}
+      let parsedProfile = null;
+      try { parsedProfile = rawProfile ? JSON.parse(rawProfile) : null; } catch (e) {}
+      const savedWaterNum = rawWater !== null ? (parseInt(rawWater, 10) || 0) : 0;
+
+      const resetRes = runDailyNutritionReset({
+        savedDateKey,
+        todayDateKey: todayKey,
+        dietMeals: parsedDiet,
+        waterMl: savedWaterNum,
+        existingHistory: parsedHistory,
+        targetCalories: Number(parsedProfile?.goalCalories || profile?.goalCalories) || 2200,
+        maxDays: 30
+      });
+
+      if (resetRes.didReset) {
+        setDietMeals(resetRes.nextDietMeals);
+        setWaterMl(resetRes.nextWaterMl);
+        setNutritionHistory(resetRes.nextHistory);
+        localStorage.setItem('app_diet_meals', JSON.stringify(resetRes.nextDietMeals));
+        localStorage.setItem('app_water_ml', String(resetRes.nextWaterMl));
+        localStorage.setItem('app_nutrition_history', JSON.stringify(resetRes.nextHistory));
+      } else {
+        if (rawWater !== null && !isNaN(parseInt(rawWater, 10))) {
+          setWaterMl(parseInt(rawWater, 10));
+        }
+        if (Array.isArray(parsedHistory)) {
+          setNutritionHistory(parsedHistory);
+        }
+      }
+      if (resetRes.nextDateKey) {
+        localStorage.setItem('app_nutrition_date_key', resetRes.nextDateKey);
+      }
+    } catch (e) {
+      console.warn('Daily nutrition reset check failed:', e);
+    }
+  };
 
   // پاشەکەوتکردنی خۆکارانەی کۆرس و ئۆنبۆردینگ بۆ ئەوەی لە کاتی ڕیفریش ون نەبێت
   useEffect(() => {
@@ -1981,7 +2326,9 @@ export default function App() {
           if (parsed && Array.isArray(parsed.weeklyPlan) && parsed.isAiOnlineGenerated === true) {
             const loc = parsed.trainingLocation || parsed.location || profile.trainingLocation || 'gym';
             const eq = parsed.homeEquipment || profile.homeEquipment || '';
-            const sanitized = sanitizeWorkoutPlan(parsed, loc, eq);
+            const sanitized = ensureCourseStartDate(
+              sanitizeWorkoutPlan(parsed, loc, eq, profile?.healthConditions || [], language, profile?.weight)
+            );
             sanitized.isAiOnlineGenerated = true;
             setWorkoutCourse(sanitized);
             try {
@@ -1995,13 +2342,48 @@ export default function App() {
         const savedHistory = localStorage.getItem('app_course_history');
         if (savedHistory) {
           const parsedH = JSON.parse(savedHistory);
-          if (Array.isArray(parsedH)) setCourseHistory(parsedH);
+          if (Array.isArray(parsedH)) setCourseHistory(normalizeCourseHistoryList(parsedH));
         }
-        const savedWater = localStorage.getItem('app_water_ml');
-        if (savedWater) {
-          const parsedW = parseInt(savedWater, 10);
-          if (!isNaN(parsedW)) setWaterMl(parsedW);
+        const savedDeload = localStorage.getItem('app_deload_weeks');
+        if (savedDeload) {
+          const parsedD = JSON.parse(savedDeload);
+          if (parsedD && typeof parsedD === 'object') setDeloadWeeks(parsedD);
         }
+        const savedLogHistory = localStorage.getItem('app_exercise_log_history');
+        if (savedLogHistory) {
+          const parsedLH = JSON.parse(savedLogHistory);
+          if (Array.isArray(parsedLH)) setExerciseLogHistory(parsedLH);
+        }
+        const savedDismissedRenewal = localStorage.getItem('app_dismissed_renewal_courses');
+        if (savedDismissedRenewal) {
+          const parsedDR = JSON.parse(savedDismissedRenewal);
+          if (parsedDR && typeof parsedDR === 'object') setDismissedRenewalCourses(parsedDR);
+        }
+        const savedReadNotifs = localStorage.getItem('app_read_notification_ids');
+        if (savedReadNotifs) {
+          const parsedRN = JSON.parse(savedReadNotifs);
+          if (Array.isArray(parsedRN)) setReadNotificationIds(parsedRN);
+        }
+        checkAndApplyDailyNutritionReset();
+
+        // خوێندنەوە یان تۆمارکردنی مێژووی کێش
+        const savedWeightHistory = localStorage.getItem('app_weight_history');
+        if (savedWeightHistory) {
+          const parsedWH = JSON.parse(savedWeightHistory);
+          if (Array.isArray(parsedWH) && parsedWH.length > 0) {
+            setWeightHistory(parsedWH);
+          } else if (profile?.weight) {
+            const seeded = appendWeightLogEntry([], profile.weight);
+            setWeightHistory(seeded);
+            localStorage.setItem('app_weight_history', JSON.stringify(seeded));
+          }
+        } else if (profile?.weight) {
+          const seeded = appendWeightLogEntry([], profile.weight);
+          setWeightHistory(seeded);
+          localStorage.setItem('app_weight_history', JSON.stringify(seeded));
+        }
+
+        hasHydratedCourseStateRef.current = true;
         const savedProtein = localStorage.getItem('app_last_used_protein');
         if (savedProtein) {
           const parsedP = JSON.parse(savedProtein);
@@ -2017,6 +2399,40 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // پشکنینی ڕیسێتی ڕۆژانە کاتێک بەکارهێنەر ئەپ دێنێتەوە سەر شاشە (لە دوای نیوەشەو)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibilityCheck = () => {
+      if (document.visibilityState === 'visible') {
+        const todayKey = getLocalDateKey();
+        const savedKey = localStorage.getItem('app_nutrition_date_key');
+        if (savedKey && savedKey !== todayKey) {
+          checkAndApplyDailyNutritionReset();
+          setSelectedDayIdx(getTodayDayIdx());
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityCheck);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityCheck);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        localStorage.setItem('app_nutrition_history', JSON.stringify(nutritionHistory || []));
+      }
+    } catch (e) {}
+  }, [nutritionHistory]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        localStorage.setItem('app_weight_history', JSON.stringify(weightHistory || []));
+      }
+    } catch (e) {}
+  }, [weightHistory]);
 
   useEffect(() => {
     try {
@@ -2052,11 +2468,130 @@ export default function App() {
 
   useEffect(() => {
     try {
-      if (typeof window !== 'undefined' && courseHistory && courseHistory.length > 0 && courseHistory[0] !== null) {
-        localStorage.setItem('app_course_history', JSON.stringify(courseHistory));
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        const clean = normalizeCourseHistoryList(courseHistory);
+        localStorage.setItem('app_course_history', JSON.stringify(clean));
       }
     } catch (e) {}
   }, [courseHistory]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        localStorage.setItem('app_deload_weeks', JSON.stringify(deloadWeeks || {}));
+      }
+    } catch (e) {}
+  }, [deloadWeeks]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        localStorage.setItem('app_exercise_log_history', JSON.stringify(exerciseLogHistory || []));
+      }
+    } catch (e) {}
+  }, [exerciseLogHistory]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        localStorage.setItem('app_dismissed_renewal_courses', JSON.stringify(dismissedRenewalCourses || {}));
+      }
+    } catch (e) {}
+  }, [dismissedRenewalCourses]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && hasHydratedCourseStateRef.current) {
+        localStorage.setItem('app_read_notification_ids', JSON.stringify(readNotificationIds || []));
+      }
+    } catch (e) {}
+  }, [readNotificationIds]);
+
+  const activateNewWorkoutCourse = (nextCourse, { resetDays = true } = {}) => {
+    if (!nextCourse || !Array.isArray(nextCourse.weeklyPlan)) return null;
+    const nowIso = new Date().toISOString();
+    const stampedCourse = {
+      ...nextCourse,
+      startDate: nowIso,
+      isAiOnlineGenerated: true
+    };
+    const prevActive = workoutCourse || safeStorage.getJSON('app_workout_course', null);
+    if (prevActive && Array.isArray(prevActive.weeklyPlan)) {
+      setCourseHistory(prev => {
+        const nextHist = archiveCourseIntoHistory(prev, prevActive, nowIso);
+        safeStorage.setItem('app_course_history', nextHist);
+        return nextHist;
+      });
+    }
+    setWorkoutCourse(stampedCourse);
+    safeStorage.setItem('app_workout_course', stampedCourse);
+    if (resetDays) {
+      setSelectedDayIdx(getTodayDayIdx());
+      setCompletedDayIndices([]);
+      safeStorage.setItem('app_completed_days_manual_v5', []);
+    }
+    try {
+      setTimeout(() => {
+        try { cacheWorkoutPlanMedia(stampedCourse.weeklyPlan); } catch (e) {}
+      }, 1200);
+    } catch (e) {}
+    return stampedCourse;
+  };
+
+  const handleReactivateHistoryCourse = (targetCourse, targetIndex) => {
+    const prevActive = workoutCourse || safeStorage.getJSON('app_workout_course', null);
+    const nowIso = new Date().toISOString();
+    const { nextActiveCourse, nextCourseHistory } = reactivateArchivedCourse({
+      activeCourse: prevActive,
+      courseHistory,
+      targetCourse,
+      targetIndex,
+      nowIso
+    });
+    if (!nextActiveCourse) return;
+    const loc = nextActiveCourse.trainingLocation || nextActiveCourse.location || profile?.trainingLocation || 'gym';
+    const eq = nextActiveCourse.homeEquipment || profile?.homeEquipment || '';
+    const sanitized = ensureCourseStartDate(
+      sanitizeWorkoutPlan(nextActiveCourse, loc, eq, profile?.healthConditions || [], language),
+      nowIso
+    );
+    sanitized.isAiOnlineGenerated = true;
+    setCourseHistory(nextCourseHistory);
+    setWorkoutCourse(sanitized);
+    safeStorage.setItem('app_course_history', nextCourseHistory);
+    safeStorage.setItem('app_workout_course', sanitized);
+    setSelectedDayIdx(getTodayDayIdx());
+    setCompletedDayIndices([]);
+    safeStorage.setItem('app_completed_days_manual_v5', []);
+    setExpandedHistoryCourseIdx(null);
+    setHistoryDeleteConfirmIdx(null);
+    setShowCourseHistory(false);
+    playSparkleSound();
+  };
+
+  const handleDeleteHistoryCourse = (targetCourse, targetIndex) => {
+    const nextCourseHistory = deleteArchivedCourse(courseHistory, targetCourse, targetIndex);
+    setCourseHistory(nextCourseHistory);
+    safeStorage.setItem('app_course_history', nextCourseHistory);
+    setHistoryDeleteConfirmIdx(null);
+    setExpandedHistoryCourseIdx(null);
+    playDeleteSound();
+  };
+
+  const openNewCourseModalWithDefaults = () => {
+    setBuilderDaysCount((workoutCourse?.daysPerWeek || 0) || profile.availableDaysPerWeek || 4);
+    setCourseLocation(workoutCourse?.trainingLocation || profile.trainingLocation || 'gym');
+    setHomeEquipment(workoutCourse?.homeEquipment || profile.homeEquipment || '');
+    setGoalFormData({
+      goal: profile.goal || (currentLangConfig.code === 'en' ? 'Muscle Gain' : currentLangConfig.code === 'ar' ? 'زيادة العضلات' : currentLangConfig.code === 'fa' ? 'رشد عضلات' : 'گەشەی ماسولکە'),
+      targetWeight: profile.targetWeight || profile.weight,
+      targetDays: profile.targetDays || 45,
+      goalPace: profile.goalPace || 'normal',
+      experienceLevel: profile.experienceLevel || 'intermediate',
+      bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] }
+    });
+    setShowNewCourseModal(true);
+  };
 
   useEffect(() => {
     try {
@@ -2153,15 +2688,48 @@ export default function App() {
     } catch (e) {}
   }, [completedDayIndices]);
 
-  // فەنکشنی دەستپێکردنەوەی هەفتەی نوێ: سێتەکان و ڕۆژە تەواوبووەکان بۆ هەفتەی نوێ نوێ دەکاتەوە
-  const handleStartNewWeekCycle = (showConfirm = false) => {
+  // فەنکشنی دەستپێکردنەوەی هەفتەی نوێ: پێش ڕیسێتکردن، داتای هەفتەی تەواوبوو لە app_exercise_log_history ئەرشیف دەکات
+  const handleStartNewWeekCycle = (showConfirm = false, endedWeekOverride = null) => {
     if (showConfirm && typeof window !== 'undefined') {
       const confirmReset = window.confirm(
         language === 'en'
-          ? "Start a fresh new week? This will reset exercise completions so you can track the new week's workouts."
-          : "دەتەوێت خولی هەفتەی نوێ دەست پێبکەیتەوە؟ سێتە تەواوبووەکان نوێ دەکرێنەوە بۆ هەفتەی تازە."
+          ? "Start a fresh new week? This will archive completed sets into weekly history and reset completions for the new week."
+          : "دەتەوێت خولی هەفتەی نوێ دەست پێبکەیتەوە؟ کۆمەڵە تەواوبووەکان لە مێژوودا پاشەکەوت دەکرێن و بۆ هەفتەی تازە نوێ دەکرێنەوە."
       );
       if (!confirmReset) return;
+    }
+
+    const activeCourseNow = workoutCourse || safeStorage.getJSON('app_workout_course', null);
+    const deloadMapNow = (deloadWeeks && Object.keys(deloadWeeks).length > 0)
+      ? deloadWeeks
+      : (safeStorage.getJSON('app_deload_weeks', {}) || {});
+    const logsNow = (exerciseLogs && Object.keys(exerciseLogs).length > 0)
+      ? exerciseLogs
+      : (safeStorage.getJSON('app_exercise_set_logs', {}) || {});
+    const endedWeekKey = endedWeekOverride || safeStorage.getItem('app_current_workout_week') || getCurrentWeekKey();
+    const endedLifecycle = getCourseLifecycleMetrics(activeCourseNow, Date.now(), Number(profile?.targetDays) || 45);
+    const endedDeload = getEffectiveDeloadState({
+      course: activeCourseNow,
+      currentWeek: endedLifecycle.currentWeek,
+      deloadWeeks: deloadMapNow
+    });
+
+    const weeklySnapshot = buildWeeklyExerciseSnapshot({
+      weekKey: endedWeekKey,
+      exerciseLogs: logsNow,
+      isDeload: endedDeload.isDeloadActive,
+      archivedAt: new Date().toISOString()
+    });
+
+    if (weeklySnapshot && Object.keys(weeklySnapshot.exercises || {}).length > 0) {
+      setExerciseLogHistory(prevHist => {
+        const baseHist = (Array.isArray(prevHist) && prevHist.length > 0)
+          ? prevHist
+          : (safeStorage.getJSON('app_exercise_log_history', []) || []);
+        const nextHist = archiveWeeklyExerciseSnapshot(baseHist, weeklySnapshot, 12);
+        safeStorage.setItem('app_exercise_log_history', nextHist);
+        return nextHist;
+      });
     }
 
     setCompletedDayIndices([]);
@@ -2210,8 +2778,8 @@ export default function App() {
         if (!savedWeekKey) {
           localStorage.setItem('app_current_workout_week', activeWeekKey);
         } else if (savedWeekKey !== activeWeekKey) {
-          // هەفتەیەکی نوێ هاتووە، هەموو سێتەکان بۆ هەفتەی نوێ نوێ دەبنەوە
-          handleStartNewWeekCycle(false);
+          // هەفتەیەکی نوێ هاتووە، سەرەتا داتای هەفتەی پێشوو ئەرشیف دەکرێت ئینجا سێتەکان نوێ دەبنەوە
+          handleStartNewWeekCycle(false, savedWeekKey);
         }
       }
     } catch (e) {
@@ -2246,7 +2814,10 @@ export default function App() {
         exList[exIdx] = {
           ...exList[exIdx],
           name: newEx.name,
-          englishName: newEx.englishName || newEx.name,
+          englishName: newEx.englishName || newEx.canonicalName || newEx.name,
+          canonicalName: newEx.canonicalName || newEx.englishName || newEx.name,
+          exerciseId: newEx.exerciseId ?? null,
+          bodyPart: newEx.bodyPart || exList[exIdx]?.bodyPart || '',
           sets: Number(newEx.sets) || Number(exList[exIdx]?.sets) || 4,
           reps: newEx.reps || exList[exIdx]?.reps || '10-12',
           rest: newEx.rest || exList[exIdx]?.rest || '60s',
@@ -2308,11 +2879,14 @@ export default function App() {
     showAdminModal ||
     showPhysiqueModal ||
     showScanModal ||
+    scannedFoodReviewModal ||
+    swapMealModalData ||
     showEditProfileModal ||
     showAuthModal ||
     showGoalModal ||
     showNotificationsModal ||
     showNewCourseModal ||
+    showCourseHistory ||
     showAiFoodModal ||
     showSettingsModal ||
     showAiDietModal ||
@@ -2324,8 +2898,12 @@ export default function App() {
     activeFormExercise ||
     exerciseToSwapConfirm ||
     exerciseSwapModalData ||
-    showSupplementsModal
+    showSupplementsModal ||
+    showCommercialMapModal ||
+    ((activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach')
   );
+
+  const isCoachChatOpen = (activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2336,8 +2914,12 @@ export default function App() {
     }
 
     const handleBackNavigation = () => {
+      if (isCoachChatOpen) { setMoreActiveTab('menu'); return; }
+      if (showCommercialMapModal) { setShowCommercialMapModal(false); return; }
       if (showAdminModal) { setShowAdminModal(false); return; }
       if (showPhysiqueModal) { setShowPhysiqueModal(false); return; }
+      if (scannedFoodReviewModal) { setScannedFoodReviewModal(null); return; }
+      if (swapMealModalData) { setSwapMealModalData(null); setAiSwappedMealCandidate(null); return; }
       if (exerciseSwapModalData) { setExerciseSwapModalData(null); return; }
       if (exerciseToSwapConfirm) { setExerciseToSwapConfirm(null); return; }
       if (showSupplementsModal) { setShowSupplementsModal(false); return; }
@@ -2349,6 +2931,7 @@ export default function App() {
       if (showGoalModal) { setShowGoalModal(false); return; }
       if (showNotificationsModal) { setShowNotificationsModal(false); return; }
       if (showNewCourseModal) { setShowNewCourseModal(false); return; }
+      if (showCourseHistory) { setShowCourseHistory(false); setHistoryDeleteConfirmIdx(null); return; }
       if (showAiFoodModal) { setShowAiFoodModal(false); return; }
       if (showSettingsModal) { setShowSettingsModal(false); return; }
       if (showAiDietModal) { setShowAiDietModal(false); return; }
@@ -2363,12 +2946,12 @@ export default function App() {
     return () => window.removeEventListener('popstate', handleBackNavigation);
   }, [
     isAnyModalOpen, activeTab, activeFormExercise, selectedFoodForPortion,
-    showScanModal, showEditProfileModal, showAuthModal, showGoalModal,
-    showNotificationsModal, showNewCourseModal, showAiFoodModal,
+    showScanModal, scannedFoodReviewModal, swapMealModalData, showEditProfileModal, showAuthModal, showGoalModal,
+    showNotificationsModal, showNewCourseModal, showCourseHistory, showAiFoodModal,
     showSettingsModal, showAiDietModal, showHomeMealsModal,
     showNutritionHistoryModal, showLogoutConfirmModal, showResetModal,
     exerciseToSwapConfirm, exerciseSwapModalData, showSupplementsModal,
-    showPhysiqueModal, showAdminModal
+    showPhysiqueModal, showAdminModal, showCommercialMapModal, isCoachChatOpen
   ]);
 
   // ==================== مەکینەی شەپۆڵی شلەمەنی دوگمەکان (Liquid Wave Ripple & Water Shape Engine) ====================
@@ -2693,11 +3276,6 @@ export default function App() {
     // بە داگرتنی دوگمەی - هیچ کاریگەرییەک لەسەر کاونتداون نابێت و تایمەر بەردەوام دەبێت لە ژماردن
   };
 
-  const handlePrintWorkout = () => {
-    if (typeof window !== 'undefined') {
-      window.print();
-    }
-  };
 
   const handleRequestNotificationPermission = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -2729,8 +3307,23 @@ export default function App() {
   };
 
   const generateAiDietProgram = async (dietType) => {
+    const runOfflineKurdishFallback = () => {
+      const offlinePlan = buildScaledOfflineKurdishDiet({
+        goalCalories: profile.goalCalories || 2200,
+        goalProtein: profile.goalProtein || 160,
+        dietType: dietType || 'balanced',
+        allergiesOrDislikes: profile.allergiesOrDislikes || ''
+      });
+      setDietMeals(offlinePlan);
+      setNutritionSubView('meals');
+      setAiDietStep('prompt');
+      setIsGeneratingDiet(false);
+      setShowAiDietModal(false);
+      try { if (typeof playSparkleSound === 'function') playSparkleSound(); } catch (e) {}
+    };
+
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      alert(currentLangConfig.code === 'en' ? 'Please connect to the internet to generate an AI nutrition plan.' : 'تکایە سەرەتا پەیوەندی بە ئینتەرنێتەوە بکە بۆ داڕشتنی خشتەی خۆراک بە زیرەکی دەستکرد.');
+      runOfflineKurdishFallback();
       return;
     }
     setIsGeneratingDiet(true);
@@ -2738,13 +3331,8 @@ export default function App() {
     
     try {
       const data_res = await window.generatePlanDirectly(profile, dietType, profile.goalCalories || 2200, language);
-      const response = { ok: true, json: async () => data_res };
-
-      if (!response.ok) throw new Error('Failed to generate diet plan');
-      const data = await response.json();
-      
-      if (Array.isArray(data) && data.length === 7) {
-        setDietMeals(data);
+      if (Array.isArray(data_res) && data_res.length === 7) {
+        setDietMeals(data_res);
         setNutritionSubView('meals');
         setAiDietStep('prompt'); 
         setIsGeneratingDiet(false);
@@ -2753,10 +3341,8 @@ export default function App() {
         throw new Error('Invalid plan format from API');
       }
     } catch (error) {
-      console.error(error);
-      setAiDietStep('select');
-      setIsGeneratingDiet(false);
-      alert(currentLangConfig.code === 'en' ? 'Could not connect to AI server. Please check your internet connection and try again.' : 'کێشەیەک لە هێڵی ئینتەرنێت ڕوویدا. تکایە دڵنیابەرەوە لە پەیوەندی ئینتەرنێتەکەت و دووبارە هەوڵبدەرەوە.');
+      console.warn('AI Diet generation failed, switching to offline Kurdish diet engine:', error);
+      runOfflineKurdishFallback();
     }
   };
   // پێشنیارکردنی زیرەکانەی ئامانج بە سیستەمی پێشکەوتوو لە مۆداڵ (AI Goal Suggestion Engine)
@@ -2854,6 +3440,7 @@ export default function App() {
       targetDays: Number(goalFormData.targetDays) || profile.targetDays,
       goal: goalFormData.goal || profile.goal,
       goalPace: goalFormData.goalPace || profile.goalPace || 'normal',
+      experienceLevel: goalFormData.experienceLevel || profile.experienceLevel || 'intermediate',
       bodyGoals: goalFormData.bodyGoals || profile.bodyGoals || { enlarge: [], shrink: [] },
       availableDaysPerWeek: count,
       trainingLocation: courseLocation || profile.trainingLocation || 'gym',
@@ -2884,30 +3471,18 @@ export default function App() {
       }
 
       if (!generated || !Array.isArray(generated.weeklyPlan) || generated.weeklyPlan.length !== 7) {
-        generated = generateAiScientificProgram(updated, count, loc, eq);
+        generated = generateAiScientificProgram(updated, count, loc, eq, language);
       }
 
-      const cleanCourse = sanitizeWorkoutPlan(generated, loc, eq);
-      cleanCourse.isAiOnlineGenerated = true;
-      setCourseHistory(prev => [cleanCourse, ...prev]);
-      setWorkoutCourse(cleanCourse);
+      const cleanCourse = sanitizeWorkoutPlan(generated, loc, eq, updated.healthConditions || [], language);
+      activateNewWorkoutCourse(cleanCourse);
       setProfile(updated);
 
-      if (cleanCourse && cleanCourse.weeklyPlan) {
-        setTimeout(() => {
-          try {
-            cacheWorkoutPlanMedia(cleanCourse.weeklyPlan);
-          } catch (e) {}
-        }, 1200);
-      }
       try {
         if (typeof window !== 'undefined') {
-          localStorage.setItem('app_workout_course', JSON.stringify(cleanCourse));
           localStorage.setItem('app_profile', JSON.stringify(updated));
         }
       } catch (e) {}
-      setSelectedDayIdx(getTodayDayIdx());
-      setCompletedDayIndices([]);
       setShowNewCourseModal(false);
       playSparkleSound();
     } catch (err) {
@@ -2922,11 +3497,21 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if ((activeTab === 'more' || activeTab === 'ai') && chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+  const scrollCoachToBottom = useCallback((smooth = true) => {
+    if (!chatScrollRef.current) return;
+    const el = chatScrollRef.current;
+    if (typeof el.scrollTo === 'function') {
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    } else {
+      el.scrollTop = el.scrollHeight;
     }
-  }, [chatMessages, isAiThinking, activeTab]);
+  }, []);
+
+  useEffect(() => {
+    if (!isCoachChatOpen) return;
+    const id = setTimeout(() => scrollCoachToBottom(true), (isChatInputFocused || isKeyboardOpen) ? 120 : 40);
+    return () => clearTimeout(id);
+  }, [isCoachChatOpen, chatMessages.length, isAiThinking, isChatInputFocused, isKeyboardOpen, scrollCoachToBottom]);
 
   // شیکارکەر و نەخشاندنی دەقی Antigravity سیستەم بە مۆدێلی دەوڵەمەند (Universal Markdown & Code Renderer)
   const renderAntigravityFormattedText = (rawText) => {
@@ -3054,7 +3639,23 @@ export default function App() {
     setIsAiThinking(true);
 
     try {
-      const data_res = await window.generateCoachReplyDirectly(query, profile, chatMessages.slice(-5), language);
+      const coachContext = {
+        experienceLevel: profile?.experienceLevel || 'intermediate',
+        currentWeek: courseLifecycle?.hasCourse ? courseLifecycle.currentWeek : 1,
+        isDeloadActive: Boolean(deloadState?.isDeloadActive),
+        allergiesOrDislikes: profile?.allergiesOrDislikes || '',
+        goalFat: profile?.goalFat,
+        goalFiber: profile?.goalFiber,
+        goalWaterMl: profile?.goalWaterMl,
+        weightHistory: Array.isArray(weightHistory) ? weightHistory.slice(-14) : []
+      };
+      const data_res = await window.generateCoachReplyDirectly(
+        query,
+        { ...profile, ...coachContext },
+        chatMessages.slice(-5),
+        language,
+        coachContext
+      );
       const response = { ok: true, json: async () => data_res };
 
       if (!response.ok) throw new Error('API request failed');
@@ -3249,11 +3850,11 @@ export default function App() {
             currentLangConfig?.code || 'ku'
           );
           if (generated && Array.isArray(generated.weeklyPlan) && generated.weeklyPlan.length === 7) {
-            generated.isAiOnlineGenerated = true;
-            setWorkoutCourse(generated);
+            const loc = updated.trainingLocation || 'gym';
+            const eq = updated.homeEquipment || '';
+            const cleanGenerated = sanitizeWorkoutPlan(generated, loc, eq, updated.healthConditions || [], currentLangConfig?.code || 'ku');
+            activateNewWorkoutCourse(cleanGenerated);
             setProfile(updated);
-            setSelectedDayIdx(getTodayDayIdx());
-            setCompletedDayIndices([]);
           } else {
             alert(t('noInternetWorkoutAlert'));
             setActionLoadingState({ active: false, message: '', actionType: '' });
@@ -3495,8 +4096,12 @@ export default function App() {
             if (data.suspendReason) setAppSuspendReason(data.suspendReason);
             if (data.profile) setProfile(data.profile);
             if (data.dietMeals) setDietMeals(data.dietMeals);
-            if (data.workoutCourse) setWorkoutCourse(data.workoutCourse);
-            if (data.courseHistory) setCourseHistory(data.courseHistory);
+            if (Array.isArray(data.nutritionHistory)) setNutritionHistory(data.nutritionHistory);
+            if (Array.isArray(data.weightHistory)) setWeightHistory(data.weightHistory);
+            if (data.workoutCourse) setWorkoutCourse(ensureCourseStartDate(data.workoutCourse));
+            if (Array.isArray(data.courseHistory)) setCourseHistory(normalizeCourseHistoryList(data.courseHistory));
+            if (data.deloadWeeks && typeof data.deloadWeeks === 'object') setDeloadWeeks(data.deloadWeeks);
+            if (Array.isArray(data.exerciseLogHistory)) setExerciseLogHistory(data.exerciseLogHistory);
             if (data.coachMemory) setCoachMemory(data.coachMemory);
             if (data.hasCompletedOnboarding !== undefined) setHasCompletedOnboarding(data.hasCompletedOnboarding);
             if (data.chatMessages) setChatMessages(data.chatMessages);
@@ -3561,8 +4166,12 @@ export default function App() {
           isSuspended: isAppSuspended,
           status: isAppSuspended ? 'suspended' : 'active',
           dietMeals,
+          nutritionHistory,
+          weightHistory,
           workoutCourse,
-          courseHistory: (courseHistory || []).filter(c => c !== null),
+          courseHistory: normalizeCourseHistoryList(courseHistory),
+          deloadWeeks,
+          exerciseLogHistory,
           coachMemory,
           hasCompletedOnboarding,
           chatMessages,
@@ -3583,7 +4192,7 @@ export default function App() {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [authUser, profile, dietMeals, workoutCourse, courseHistory, coachMemory, hasCompletedOnboarding, chatMessages, exerciseLogs, waterMl, completedDayIndices, aiCustomFoods, theme, colorTheme, language, isAppSuspended]);
+  }, [authUser, profile, dietMeals, nutritionHistory, weightHistory, workoutCourse, courseHistory, deloadWeeks, exerciseLogHistory, coachMemory, hasCompletedOnboarding, chatMessages, exerciseLogs, waterMl, completedDayIndices, aiCustomFoods, theme, colorTheme, language, isAppSuspended]);
 
   // گوێگرتنی ڕاستەوخۆ بۆ دۆخی قفڵکردنی مۆبایل و گۆڕانکارییەکانی ڕاهێنەر (تەنها بۆ بەکارهێنەری چوونەژوورەوەبوو)
   useEffect(() => {
@@ -3593,9 +4202,10 @@ export default function App() {
       setIsAppSuspended(isSuspended);
       if (suspendReason) setAppSuspendReason(suspendReason);
       if (updatedWorkoutCourse) {
-        setWorkoutCourse(updatedWorkoutCourse);
+        const synced = ensureCourseStartDate(updatedWorkoutCourse);
+        setWorkoutCourse(synced);
         try {
-          localStorage.setItem('app_workout_course', JSON.stringify(updatedWorkoutCourse));
+          localStorage.setItem('app_workout_course', JSON.stringify(synced));
         } catch (e) {}
       }
     });
@@ -3610,9 +4220,177 @@ export default function App() {
   const totalFatG = allMealItems.reduce((acc, i) => acc + (i.fat || 0), 0);
   const currentLoggedProteinCount = allMealItems.filter(item => item && lastUsedProtein && (item.name === lastUsedProtein.name || (item.englishName && item.englishName === lastUsedProtein.englishName))).length;
 
-  const goalProgressPercent = Math.min(Math.round((8 / (profile.targetDays || 45)) * 100), 100);
-  const remainingDays = Math.max((profile.targetDays || 45) - 8, 0);
-  const hasUnreadNotifications = notifications.some(n => n.unread);
+  // یەکەی وزە (کالۆری یان کیلۆجوڵ)
+  const displayEnergy = (kcal) => convertEnergyValue(kcal, settingsEnergyUnit);
+  const energyUnitLabel = settingsEnergyUnit === 'kJ'
+    ? (currentLangConfig.code === 'en' ? 'kJ' : 'کیلۆجوڵ')
+    : t('kcal');
+
+  // تۆمارکردنی مێژووی کێش و شیکاری وەستانی گەشە (Adaptive TDEE Check-in)
+  const recordWeightEntry = (nextWeightKg) => {
+    const w = Number(nextWeightKg);
+    if (!Number.isFinite(w) || w < 30 || w > 300) return;
+    setWeightHistory(prev => {
+      const nextHist = appendWeightLogEntry(prev || [], w);
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('app_weight_history', JSON.stringify(nextHist));
+        }
+      } catch (e) {}
+      return nextHist;
+    });
+  };
+
+  const adaptiveTdeeStatus = useMemo(
+    () => detectWeightPlateauAndAdaptiveTdee({
+      weightHistory,
+      goal: profile?.goal,
+      weight: profile?.weight,
+      targetWeight: profile?.targetWeight,
+      goalCalories: profile?.goalCalories,
+      bmr: profile?.bmr || 0,
+      gender: profile?.gender || 'male',
+      minDaysSpan: 14
+    }),
+    [weightHistory, profile?.goal, profile?.weight, profile?.targetWeight, profile?.goalCalories, profile?.bmr, profile?.gender]
+  );
+
+  const todayNutritionDateKey = getLocalDateKey();
+  const isAdaptiveBannerVisible = Boolean(
+    adaptiveTdeeStatus?.isStalled &&
+    adaptiveTdeeStatus?.suggestedDelta !== 0 &&
+    dismissedAdaptiveDate !== todayNutritionDateKey
+  );
+
+  const handleApplyAdaptiveCalories = () => {
+    if (!adaptiveTdeeStatus?.isStalled || !adaptiveTdeeStatus?.nextCalories) return;
+    const recalc = calculateAdaptiveMacrosFromCalories(profile, adaptiveTdeeStatus.nextCalories);
+    const updated = {
+      ...profile,
+      ...recalc
+    };
+    setProfile(updated);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('app_profile', JSON.stringify(updated));
+        localStorage.setItem('app_dismissed_adaptive_banner', todayNutritionDateKey);
+      }
+    } catch (e) {}
+    setDismissedAdaptiveDate(todayNutritionDateKey);
+    playSparkleSound();
+    triggerHapticFeedback(20);
+  };
+
+  const handleDismissAdaptiveBanner = () => {
+    setDismissedAdaptiveDate(todayNutritionDateKey);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('app_dismissed_adaptive_banner', todayNutritionDateKey);
+      }
+    } catch (e) {}
+  };
+
+  const handleQuickWeightCheckIn = () => {
+    const parsed = parseFloat(String(quickWeightInput || '').replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed < 30 || parsed > 300) return;
+    const roundedW = Math.round(parsed * 10) / 10;
+    const base = { ...profile, weight: roundedW };
+    const autoCalc = calculateScientificGoalByAi(base);
+    const updated = { ...base, ...autoCalc };
+    setProfile(updated);
+    recordWeightEntry(roundedW);
+    setQuickWeightInput('');
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('app_profile', JSON.stringify(updated));
+      }
+    } catch (e) {}
+    playSparkleSound();
+    triggerHapticFeedback(15);
+  };
+
+  // ==================== سووڕی ژیانی کۆرس، دیڵۆد، وەستانی گەشە و ئاگادارییە دینامیکییەکان ====================
+  const courseLifecycle = useMemo(
+    () => getCourseLifecycleMetrics(workoutCourse, Date.now(), Number(profile?.targetDays) || 45),
+    [workoutCourse, profile?.targetDays]
+  );
+
+  const deloadState = useMemo(
+    () => getEffectiveDeloadState({
+      course: workoutCourse,
+      currentWeek: courseLifecycle.currentWeek,
+      deloadWeeks
+    }),
+    [workoutCourse, courseLifecycle.currentWeek, deloadWeeks]
+  );
+
+  const handleToggleDeloadMode = (forceState = null) => {
+    const tag = deloadState.weekTag;
+    setDeloadWeeks(prev => {
+      const currentActive = prev && Object.prototype.hasOwnProperty.call(prev, tag) ? Boolean(prev[tag]) : deloadState.isDeloadActive;
+      const nextVal = forceState !== null ? Boolean(forceState) : !currentActive;
+      const nextMap = { ...(prev || {}), [tag]: nextVal };
+      safeStorage.setItem('app_deload_weeks', nextMap);
+      return nextMap;
+    });
+    playSparkleSound();
+  };
+
+  const renewalCourseKey = workoutCourse
+    ? `${workoutCourse.id || 'active'}_${workoutCourse.startDate || ''}_w${courseLifecycle.currentWeek >= 10 ? 10 : 8}`
+    : '';
+  const isRenewalBannerVisible = Boolean(
+    courseLifecycle.hasCourse &&
+    courseLifecycle.isRenewalWindow &&
+    !dismissedRenewalCourses[renewalCourseKey]
+  );
+
+  const handleDismissRenewalBanner = () => {
+    if (!renewalCourseKey) return;
+    setDismissedRenewalCourses(prev => {
+      const nextMap = { ...(prev || {}), [renewalCourseKey]: true };
+      safeStorage.setItem('app_dismissed_renewal_courses', nextMap);
+      return nextMap;
+    });
+  };
+
+  const exercisePlateaus = useMemo(
+    () => detectExercisePlateaus(exerciseLogHistory, { workoutCourse, minWeeks: 2 }),
+    [exerciseLogHistory, workoutCourse]
+  );
+
+  const getPlateauForExercise = (ex, exKey) => {
+    if (!exercisePlateaus || typeof exercisePlateaus !== 'object') return null;
+    if (exKey && exercisePlateaus[exKey]) return exercisePlateaus[exKey];
+    if (ex?.englishName && exercisePlateaus[ex.englishName]) return exercisePlateaus[ex.englishName];
+    if (ex?.name && exercisePlateaus[ex.name]) return exercisePlateaus[ex.name];
+    const targetLower = String(exKey || ex?.englishName || ex?.name || '').toLowerCase();
+    for (const k of Object.keys(exercisePlateaus)) {
+      if (k.toLowerCase() === targetLower) return exercisePlateaus[k];
+    }
+    return null;
+  };
+
+  const notifications = useMemo(
+    () => generateLifecycleNotifications({
+      workoutCourse,
+      lifecycle: courseLifecycle,
+      isDeloadActive: deloadState.isDeloadActive,
+      plateaus: exercisePlateaus,
+      readNotificationIds,
+      waterMl,
+      waterGoalMl: profile?.goalWaterMl || 3000,
+      totalEatenCalories,
+      calorieGoal: profile?.goalCalories || 2200,
+      lang: language
+    }),
+    [workoutCourse, courseLifecycle, deloadState.isDeloadActive, exercisePlateaus, readNotificationIds, waterMl, profile?.goalWaterMl, totalEatenCalories, profile?.goalCalories, language]
+  );
+
+  const goalProgressPercent = courseLifecycle.goalProgressPercent;
+  const remainingDays = courseLifecycle.remainingDays;
+  const unreadNotificationCount = notifications.filter(n => n.unread).length;
+  const hasUnreadNotifications = unreadNotificationCount > 0;
 
   // لیستی خۆراکە بنەڕەتییەکان
   const masterFoodList = [
@@ -4354,7 +5132,7 @@ Rules:
         const next = { ...prev };
         exercises.forEach(ex => {
           const exKey = ex.englishName || ex.name;
-          const setsCount = Math.min(Number(ex.sets) || 4, 8);
+          const setsCount = getEffectiveExercisePrescription(ex, deloadState.isDeloadActive).sets;
           next[exKey] = Array.from({ length: setsCount }).map((_, sIdx) => ({
             weight: (prev[exKey]?.[sIdx]?.weight) || '',
             reps: (prev[exKey]?.[sIdx]?.reps) || '',
@@ -4381,7 +5159,7 @@ Rules:
         const next = { ...prev };
         exercises.forEach(ex => {
           const exKey = ex.englishName || ex.name;
-          const setsCount = Math.min(Number(ex.sets) || 4, 8);
+          const setsCount = getEffectiveExercisePrescription(ex, deloadState.isDeloadActive).sets;
           next[exKey] = Array.from({ length: setsCount }).map((_, sIdx) => ({
             weight: (prev[exKey]?.[sIdx]?.weight) || '',
             reps: (prev[exKey]?.[sIdx]?.reps) || '',
@@ -4404,7 +5182,12 @@ Rules:
   };
 
   const handleMarkAllNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    const allIds = notifications.map(n => n.id);
+    setReadNotificationIds(prev => {
+      const merged = Array.from(new Set([...(prev || []), ...allIds]));
+      safeStorage.setItem('app_read_notification_ids', merged);
+      return merged;
+    });
   };
 
   const handleSaveProfile = () => {
@@ -4412,6 +5195,12 @@ Rules:
     const autoCalc = calculateScientificGoalByAi(base);
     const updated = { ...base, ...autoCalc };
     setProfile(updated);
+    recordWeightEntry(updated.weight);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('app_profile', JSON.stringify(updated));
+      }
+    } catch (e) {}
     setShowEditProfileModal(false);
   };
 
@@ -4422,12 +5211,246 @@ Rules:
       targetDays: Number(goalFormData.targetDays) || profile.targetDays,
       goal: goalFormData.goal || profile.goal,
       goalPace: goalFormData.goalPace || profile.goalPace || 'normal',
+      experienceLevel: goalFormData.experienceLevel || profile.experienceLevel || 'intermediate',
       bodyGoals: goalFormData.bodyGoals || profile.bodyGoals || { enlarge: [], shrink: [] }
     };
     const autoCalc = calculateScientificGoalByAi(base);
     const updated = { ...base, ...autoCalc };
     setProfile(updated);
+    recordWeightEntry(updated.weight);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('app_profile', JSON.stringify(updated));
+      }
+    } catch (e) {}
     setShowGoalModal(false);
+  };
+
+  const handleUpdateAllergiesOrDislikes = (nextText) => {
+    setProfile(prev => {
+      const updated = { ...prev, allergiesOrDislikes: nextText };
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('app_profile', JSON.stringify(updated));
+        }
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const handleOpenSwapMealModal = (mealType, currentItems = []) => {
+    const mealItems = Array.isArray(currentItems) ? currentItems : [];
+    const currentMealCals = mealItems.reduce((acc, i) => acc + (Number(i?.calories) || 0), 0);
+    const currentMealProt = mealItems.reduce((acc, i) => acc + (Number(i?.protein) || 0), 0);
+    const slotShare = mealType === 'lunch' ? 0.35 : mealType === 'snack' ? 0.15 : 0.25;
+    const targetCalories = currentMealCals > 80
+      ? Math.round(currentMealCals)
+      : Math.round((Number(profile?.goalCalories) || 2200) * slotShare);
+    const targetProtein = currentMealProt > 5
+      ? Math.round(currentMealProt)
+      : Math.round((Number(profile?.goalProtein) || 150) * slotShare);
+
+    setAiSwappedMealCandidate(null);
+    setSwapMealModalData({
+      mealType,
+      dayIdx: selectedDayIdx,
+      currentItems: mealItems,
+      targetCalories,
+      targetProtein
+    });
+  };
+
+  const handleApplySwappedMeal = (candidate) => {
+    if (!swapMealModalData || !candidate || !Array.isArray(candidate.items)) return;
+    const { mealType, dayIdx } = swapMealModalData;
+    const stampedItems = candidate.items.map((it, idx) => ({
+      id: `swap_${dayIdx}_${mealType}_${Date.now()}_${idx}`,
+      name: it.name || it.englishName || 'خواردن',
+      englishName: it.englishName || it.name || 'Meal Item',
+      calories: Math.round(Number(it.calories) || 0),
+      protein: Math.round((Number(it.protein) || 0) * 10) / 10,
+      carbs: Math.round((Number(it.carbs) || 0) * 10) / 10,
+      fat: Math.round((Number(it.fat) || 0) * 10) / 10,
+      quantity: Number(it.quantity) || 100,
+      unit: it.unit || 'گرام',
+      isEaten: false
+    }));
+
+    setDietMeals(prev => {
+      const basePlan = (Array.isArray(prev) && prev.length === 7)
+        ? [...prev]
+        : Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
+      const targetDay = basePlan[dayIdx] || { breakfast: [], lunch: [], snack: [], dinner: [] };
+      basePlan[dayIdx] = {
+        ...targetDay,
+        [mealType]: stampedItems
+      };
+      return basePlan;
+    });
+
+    setSwapMealModalData(null);
+    setAiSwappedMealCandidate(null);
+    playSparkleSound();
+    triggerHapticFeedback(15);
+  };
+
+  const handleAiSwapSingleMeal = async () => {
+    if (!swapMealModalData) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const localCands = findSingleMealReplacementCandidates({
+        mealType: swapMealModalData.mealType,
+        targetCalories: swapMealModalData.targetCalories,
+        targetProtein: swapMealModalData.targetProtein,
+        currentItems: swapMealModalData.currentItems,
+        foodCatalog: normalizedMasterFoodList,
+        allergiesOrDislikes: profile?.allergiesOrDislikes || ''
+      });
+      if (localCands[0]) setAiSwappedMealCandidate(localCands[0]);
+      return;
+    }
+
+    setIsAiSwappingMeal(true);
+    try {
+      const res = await window.swapSingleMealDirectly(
+        profile,
+        swapMealModalData.mealType,
+        swapMealModalData.targetCalories,
+        swapMealModalData.targetProtein,
+        swapMealModalData.currentItems,
+        language
+      );
+      if (res && Array.isArray(res.items) && res.items.length > 0) {
+        const totals = res.items.reduce(
+          (acc, it) => ({
+            cals: acc.cals + (Number(it.calories) || 0),
+            prot: acc.prot + (Number(it.protein) || 0),
+            carbs: acc.carbs + (Number(it.carbs) || 0),
+            fat: acc.fat + (Number(it.fat) || 0)
+          }),
+          { cals: 0, prot: 0, carbs: 0, fat: 0 }
+        );
+        setAiSwappedMealCandidate({
+          id: 'ai_swap_' + Date.now(),
+          label: res.label || (currentLangConfig.code === 'en' ? 'AI Balanced Kurdish Replacement' : 'بەدیلی زیرەکی کوردی هاوسەنگ'),
+          items: res.items,
+          totalCalories: Math.round(totals.cals),
+          totalProtein: Math.round(totals.prot * 10) / 10,
+          totalCarbs: Math.round(totals.carbs * 10) / 10,
+          totalFat: Math.round(totals.fat * 10) / 10
+        });
+      }
+    } catch (err) {
+      console.warn('AI Single Meal Swap error:', err);
+    } finally {
+      setIsAiSwappingMeal(false);
+    }
+  };
+
+  const handleUpdateScannedItemGrams = (itemId, rawValue) => {
+    const parsedGrams = Math.max(0, Math.round(Number(rawValue) || 0));
+    setScannedFoodReviewModal(prev => {
+      if (!prev || !Array.isArray(prev.items)) return prev;
+      const nextItems = prev.items.map(it => {
+        if (it.id !== itemId) return it;
+        const scaled = computeMacrosForGrams(it, Math.max(1, parsedGrams));
+        return {
+          ...it,
+          estimatedWeightGrams: parsedGrams,
+          totalCalories: parsedGrams > 0 ? scaled.calories : 0,
+          totalProtein: parsedGrams > 0 ? scaled.protein : 0,
+          totalCarbs: parsedGrams > 0 ? scaled.carbs : 0,
+          totalFat: parsedGrams > 0 ? scaled.fat : 0
+        };
+      });
+      const totals = nextItems.reduce(
+        (acc, it) => ({
+          w: acc.w + (Number(it.estimatedWeightGrams) || 0),
+          cals: acc.cals + (Number(it.totalCalories) || 0),
+          prot: acc.prot + (Number(it.totalProtein) || 0),
+          carbs: acc.carbs + (Number(it.totalCarbs) || 0),
+          fat: acc.fat + (Number(it.totalFat) || 0)
+        }),
+        { w: 0, cals: 0, prot: 0, carbs: 0, fat: 0 }
+      );
+      return {
+        ...prev,
+        items: nextItems,
+        totalWeightGrams: Math.round(totals.w),
+        totalCalories: Math.round(totals.cals),
+        totalProtein: Math.round(totals.prot * 10) / 10,
+        totalCarbs: Math.round(totals.carbs * 10) / 10,
+        totalFat: Math.round(totals.fat * 10) / 10
+      };
+    });
+  };
+
+  const handleLogScannedItems = (itemsToLog, closeAfter = true) => {
+    const validItems = (itemsToLog || []).filter(it => it && Number(it.estimatedWeightGrams) > 0);
+    if (validItems.length === 0) return;
+
+    const targetMeal = scannedMealTarget || selectedMealType || 'lunch';
+    const loggedEntries = validItems.map((it, idx) => {
+      const macros = computeMacrosForGrams(it, Number(it.estimatedWeightGrams));
+      return {
+        id: Date.now() + idx,
+        name: it.name || 'خواردنی سکانکراو',
+        englishName: it.englishName || it.name || 'Scanned Food',
+        icon: it.icon || '🍽️',
+        calories: macros.calories,
+        protein: Math.round(macros.protein),
+        carbs: Math.round(macros.carbs),
+        fat: Math.round(macros.fat),
+        quantity: macros.grams,
+        unit: it.isLiquid ? 'مل' : 'گرام',
+        isEaten: true
+      };
+    });
+
+    setDietMeals(prev => {
+      const nextPlan = (Array.isArray(prev) && prev.length === 7)
+        ? [...prev]
+        : Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
+      const dayObj = nextPlan[selectedDayIdx] || { breakfast: [], lunch: [], snack: [], dinner: [] };
+      nextPlan[selectedDayIdx] = {
+        ...dayObj,
+        [targetMeal]: [...(dayObj[targetMeal] || []), ...loggedEntries]
+      };
+      return nextPlan;
+    });
+
+    if (typeof playMealLoggedSound === 'function') playMealLoggedSound();
+    triggerHapticFeedback(20);
+
+    if (closeAfter) {
+      setScannedFoodReviewModal(null);
+    } else {
+      const loggedIds = new Set(validItems.map(i => i.id));
+      setScannedFoodReviewModal(prev => {
+        if (!prev) return null;
+        const remaining = (prev.items || []).filter(i => !loggedIds.has(i.id));
+        if (remaining.length === 0) return null;
+        const totals = remaining.reduce(
+          (acc, it) => ({
+            w: acc.w + (Number(it.estimatedWeightGrams) || 0),
+            cals: acc.cals + (Number(it.totalCalories) || 0),
+            prot: acc.prot + (Number(it.totalProtein) || 0),
+            carbs: acc.carbs + (Number(it.totalCarbs) || 0),
+            fat: acc.fat + (Number(it.totalFat) || 0)
+          }),
+          { w: 0, cals: 0, prot: 0, carbs: 0, fat: 0 }
+        );
+        return {
+          ...prev,
+          items: remaining,
+          isMultiItem: remaining.length > 1,
+          totalWeightGrams: Math.round(totals.w),
+          totalCalories: Math.round(totals.cals),
+          totalProtein: Math.round(totals.prot * 10) / 10,
+          totalCarbs: Math.round(totals.carbs * 10) / 10,
+          totalFat: Math.round(totals.fat * 10) / 10
+        };
+      });
+    }
   };
 
   const handleAddHealthCondition = (tag) => {
@@ -4491,6 +5514,93 @@ Rules:
     L ${500 - r} 0
     Q 500 0 500 ${r}
   `;
+
+  const renderAdaptiveNutritionBanner = () => {
+    if (!isAdaptiveBannerVisible || !adaptiveTdeeStatus?.isStalled) return null;
+    const isBulkMode = adaptiveTdeeStatus.mode === 'bulk';
+    const deltaLabel = adaptiveTdeeStatus.suggestedDelta > 0
+      ? `+${displayEnergy(adaptiveTdeeStatus.suggestedDelta)} ${energyUnitLabel}`
+      : `${displayEnergy(adaptiveTdeeStatus.suggestedDelta)} ${energyUnitLabel}`;
+
+    return (
+      <div
+        className="dark-card fade-in"
+        style={{
+          padding: '14px 16px',
+          marginBottom: '12px',
+          borderRadius: '18px',
+          background: isBulkMode
+            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.1))'
+            : 'linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.1))',
+          border: `1px solid ${isBulkMode ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+          direction: currentLangConfig.dir
+        }}
+      >
+        <div className="flex-between" style={{ alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13.5px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <TrendingUp size={16} style={{ color: isBulkMode ? '#10B981' : '#F59E0B' }} />
+              <span>
+                {currentLangConfig.code === 'en'
+                  ? `Adaptive Nutrition Check (${adaptiveTdeeStatus.daysTracked}+ days)`
+                  : `پێداچوونەوەی خۆکاری کالۆری (${adaptiveTdeeStatus.daysTracked} ڕۆژ)`}
+              </span>
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.55' }}>
+              {currentLangConfig.code === 'en'
+                ? `Weight stalled near ${adaptiveTdeeStatus.recentAvg} kg (Δ ${adaptiveTdeeStatus.netChangeKg} kg). Adjust target by ${deltaLabel} → ${displayEnergy(adaptiveTdeeStatus.nextCalories)} ${energyUnitLabel}?`
+                : `لە ماوەی ${adaptiveTdeeStatus.daysTracked} ڕۆژی ڕابردوودا کێشت جێگیر بووە (${adaptiveTdeeStatus.recentAvg} کگم). پێشنیار دەکرێت ${deltaLabel} بگۆڕدرێت بۆ ${displayEnergy(adaptiveTdeeStatus.nextCalories)} ${energyUnitLabel}.`}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDismissAdaptiveBanner}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+            aria-label="Dismiss"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleApplyAdaptiveCalories}
+            className="liquid-pill"
+            style={{
+              padding: '8px 14px',
+              background: 'var(--accent-gradient)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '12px',
+              fontSize: '12px',
+              fontWeight: '800',
+              cursor: 'pointer'
+            }}
+          >
+            {currentLangConfig.code === 'en' ? `Apply (${deltaLabel})` : `جێبەجێکردنی ${deltaLabel}`}
+          </button>
+          <button
+            type="button"
+            onClick={handleDismissAdaptiveBanner}
+            className="liquid-pill"
+            style={{
+              padding: '8px 12px',
+              background: 'var(--card-subtle)',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '12px',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            {currentLangConfig.code === 'en' ? 'Not now' : 'دواتر'}
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const renderMealJourney = () => {
     return (
@@ -4566,11 +5676,23 @@ Rules:
                 <div style={{ position: 'absolute', right: isRtl ? '-24.5px' : 'auto', left: isRtl ? 'auto' : '-24.5px', top: '16px', width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent-primary)', border: '2px solid var(--bg-color)', zIndex: 2 }}></div>
                 
                 <div className="dark-card" style={{ padding: '16px 18px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '18px' }}>
-                  <div className="flex-between" style={{ marginBottom: items.length > 0 ? '12px' : '0', alignItems: 'center' }}>
+                  <div className="flex-between" style={{ marginBottom: items.length > 0 ? '12px' : '0', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <div style={{ fontWeight: '800', fontSize: '15.5px', color: 'var(--text-main)' }}>
                       {meal.title}
                     </div>
-                    <div className="liquid-pill" style={{ padding: '4px 12px', fontWeight: '800', fontSize: '12.5px', color: 'var(--text-main)', background: 'var(--accent-glow)' }}>{cals} {t('kcal')}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSwapMealModal(meal.type, items)}
+                        className="liquid-pill"
+                        style={{ padding: '4px 10px', fontWeight: '800', fontSize: '11.5px', color: 'var(--accent-primary)', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        title={currentLangConfig.code === 'en' ? 'Swap Meal' : 'گۆڕینی ژەم'}
+                      >
+                        <RefreshCw size={12} />
+                        <span>{currentLangConfig.code === 'en' ? 'Swap' : 'گۆڕینی ژەم'}</span>
+                      </button>
+                      <div className="liquid-pill" style={{ padding: '4px 12px', fontWeight: '800', fontSize: '12.5px', color: 'var(--text-main)', background: 'var(--accent-glow)' }}>{displayEnergy(cals)} {energyUnitLabel}</div>
+                    </div>
                   </div>
 
                   {items.length > 0 ? (
@@ -4616,7 +5738,7 @@ Rules:
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <span style={{ fontWeight: '800', color: 'var(--text-main)', fontSize: '14px', letterSpacing: '-0.2px', opacity: item.isEaten ? 0.5 : 1 }}>
-                              {item.calories} {t('kcal')}
+                              {displayEnergy(item.calories)} {energyUnitLabel}
                             </span>
                             
                             <div
@@ -4685,7 +5807,7 @@ Rules:
           <div className="flex-between" style={{ marginBottom: '10px' }}>
             <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: '800' }}>{t('totalEatenCals')}</span>
             <span style={{ fontSize: '14px', fontWeight: '900', color: 'var(--text-main)' }}>
-              <span style={{ color: 'var(--accent-primary)', fontSize: '16px' }}>{totalEatenCalories}</span> / {profile.goalCalories} {t('kcal')}
+              <span style={{ color: 'var(--accent-primary)', fontSize: '16px' }}>{displayEnergy(totalEatenCalories)}</span> / {displayEnergy(profile.goalCalories)} {energyUnitLabel}
             </span>
           </div>
           <div style={{ width: '100%', height: '7px', background: 'var(--circle-track)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -4717,19 +5839,28 @@ Rules:
               }}
             >
               {/* هێڵی سەرەوەی ژەمەکە */}
-              <div className="flex-between" style={{ marginBottom: '14px', alignItems: 'center' }}>
+              <div className="flex-between" style={{ marginBottom: '14px', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ fontWeight: '900', fontSize: '16.5px', color: 'var(--text-main)', letterSpacing: '-0.2px' }}>
                   {meal.title}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSwapMealModal(meal.type, rawItems)}
+                    className="liquid-pill"
+                    style={{ padding: '4px 10px', fontWeight: '800', fontSize: '11.5px', color: 'var(--accent-primary)', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <RefreshCw size={12} />
+                    <span>{currentLangConfig.code === 'en' ? 'Swap' : 'گۆڕینی ژەم'}</span>
+                  </button>
                   {mealProtein > 0 && (
                     <span style={{ fontSize: '12px', color: 'var(--color-proteins)', fontWeight: '800', background: 'rgba(56, 189, 248, 0.12)', padding: '4px 10px', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
                       {mealProtein}g {t('protein')}
                     </span>
                   )}
                   <span style={{ padding: '6px 14px', fontWeight: '900', fontSize: '13px', color: mealCals > 0 ? 'var(--color-proteins)' : 'var(--accent-primary)', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', borderRadius: '12px', boxShadow: '0 2px 8px var(--accent-glow)' }}>
-                    {mealCals} {t('kcal')}
+                    {displayEnergy(mealCals)} {energyUnitLabel}
                   </span>
                 </div>
               </div>
@@ -5220,7 +6351,17 @@ Rules:
           </div>
 
           <div style={{ width: '100%', maxWidth: '480px', margin: '0 auto' }}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '15px',
+                overflow: 'hidden',
+                boxShadow: '0 8px 22px rgba(0, 164, 255, 0.25)',
+                border: '1px solid rgba(255,255,255,0.14)'
+              }}>
+                <BqGymLogo size={54} />
+              </div>
               <h1 style={{ fontSize: '24px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>{t('welcomeTitle')}</h1>
             </div>
 
@@ -5362,6 +6503,9 @@ Rules:
               {onboardingStep === 4 && (
                 <div className="fade-in">
                   <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '20px', color: 'var(--accent-primary)' }}>{t('stepInjuries')}</h3>
+                  <div style={{ marginBottom: '16px' }}>
+                    {renderExperienceSelector(onboardingData.experienceLevel || 'beginner', (lvl) => setOnboardingData({ ...onboardingData, experienceLevel: lvl }))}
+                  </div>
                   <div style={{ marginBottom: '8px' }}>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '800' }}>{t('healthStatus')}</label>
                     <input 
@@ -5451,6 +6595,7 @@ Rules:
                           : (Number(onboardingData.targetWeight) || (onboardingData.goal.includes('زیادکردن') ? finalWeight + 5 : Math.max(45, finalWeight - 5)));
                         const base = {
                           ...onboardingData,
+                          experienceLevel: onboardingData.experienceLevel || 'beginner',
                           usesSupplements: false,
                           supplements: [],
                           weight: finalWeight,
@@ -5466,6 +6611,7 @@ Rules:
                         const autoCalc = calculateScientificGoalByAi(base);
                         const updated = { ...base, ...autoCalc, goalSugar: 35 };
                         setProfile(updated);
+                        recordWeightEntry(updated.weight);
                         setWorkoutCourse(null);
                         const emptyDiet = Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
                         setDietMeals(emptyDiet);
@@ -5473,6 +6619,7 @@ Rules:
                           localStorage.setItem('app_profile', JSON.stringify(updated));
                           localStorage.removeItem('app_workout_course');
                           localStorage.setItem('app_diet_meals', JSON.stringify(emptyDiet));
+                          localStorage.setItem('app_nutrition_date_key', getLocalDateKey());
                         } catch (e) {}
                         setHasCompletedOnboarding(true);
                         if (!authUser) {
@@ -5557,6 +6704,7 @@ Rules:
                         : (Number(onboardingData.targetWeight) || (onboardingData.goal.includes('زیادکردن') ? finalWeight + 5 : Math.max(45, finalWeight - 5)));
                       const base = {
                         ...onboardingData,
+                        experienceLevel: onboardingData.experienceLevel || 'beginner',
                         supplements: Array.isArray(onboardingData.supplements) ? onboardingData.supplements : [],
                         weight: finalWeight,
                         height: finalHeight,
@@ -5571,6 +6719,7 @@ Rules:
                       const autoCalc = calculateScientificGoalByAi(base);
                       const updated = { ...base, ...autoCalc, goalSugar: 35 };
                       setProfile(updated);
+                      recordWeightEntry(updated.weight);
                       setWorkoutCourse(null);
                       const emptyDiet = Array(7).fill(null).map(() => ({ breakfast: [], lunch: [], snack: [], dinner: [] }));
                       setDietMeals(emptyDiet);
@@ -5578,6 +6727,7 @@ Rules:
                         localStorage.setItem('app_profile', JSON.stringify(updated));
                         localStorage.removeItem('app_workout_course');
                         localStorage.setItem('app_diet_meals', JSON.stringify(emptyDiet));
+                        localStorage.setItem('app_nutrition_date_key', getLocalDateKey());
                       } catch (e) {}
                       setHasCompletedOnboarding(true);
                       if (!authUser) {
@@ -5705,9 +6855,8 @@ Rules:
           <main
             className="app-scroll-view"
             style={{
-              overflowY: ((activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach') ? 'hidden' : 'auto',
-              display: ((activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach') ? 'flex' : 'block',
-              flexDirection: 'column'
+              overflowY: 'auto',
+              display: 'block'
             }}
           >
           {/* ١. پەڕەی سەرەکی (Home View) */}
@@ -5767,7 +6916,9 @@ Rules:
               >
                 <BellIcon size={18} />
                 {hasUnreadNotifications && (
-                  <div style={{ position: 'absolute', top: '7px', right: '7px', width: '7px', height: '7px', background: '#38BDF8', borderRadius: '50%' }}></div>
+                  <span style={{ position: 'absolute', top: '-3px', right: '-3px', minWidth: '17px', height: '17px', padding: '0 4px', background: '#ef4444', color: '#ffffff', borderRadius: '999px', fontSize: '10px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid var(--bg-main)' }}>
+                    {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                  </span>
                 )}
               </button>
             </div>
@@ -5998,14 +7149,14 @@ Rules:
                           lineHeight: '1',
                           letterSpacing: '-0.5px'
                         }}>
-                          {totalEatenCalories}
+                          {displayEnergy(totalEatenCalories)}
                         </span>
                         <span style={{
                           fontSize: '15px',
                           fontWeight: '800',
                           color: theme === 'light' ? '#475569' : 'rgba(255, 255, 255, 0.75)'
                         }}>
-                          {t('kcal')}
+                          {energyUnitLabel}
                         </span>
                       </div>
 
@@ -6020,49 +7171,94 @@ Rules:
                         gap: '4px'
                       }}>
                         <span>{t('targetCalories')}:</span>
-                        <span style={{ fontWeight: '600', color: theme === 'light' ? '#0f172a' : '#FFFFFF' }}>{profile.goalCalories}</span>
-                        <span>{t('kcal')}</span>
+                        <span style={{ fontWeight: '600', color: theme === 'light' ? '#0f172a' : '#FFFFFF' }}>{displayEnergy(profile.goalCalories)}</span>
+                        <span>{energyUnitLabel}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* زانیارییەکانی پرۆتین و کاربۆهیدرات بە تەواوی لە یەک دێڕ بەبێ ئایکۆن و ڕێژەی سەدی (گونجاو لەگەڵ هەردوو مۆدی ڕۆژ و شەو) */}
-                  <div 
-                    style={{ 
-                      display: 'flex', 
-                      justifyContent: 'center', 
-                      alignItems: 'center', 
-                      gap: '14px', 
-                      padding: '2px 8px 6px 8px',
-                      whiteSpace: 'nowrap',
-                      flexWrap: 'nowrap',
-                      userSelect: 'none',
-                      fontSize: '12px',
-                      fontWeight: '400'
-                    }}
-                  >
-                    {/* پرۆتین */}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: theme === 'light' ? '#475569' : 'rgba(255, 255, 255, 0.8)' }}>
-                      <span style={{ color: 'var(--color-proteins, #38BDF8)', fontWeight: '600' }}>{t('protein')}:</span>
-                      <span dir="ltr" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '1px' }}>
-                        <span style={{ color: theme === 'light' ? '#0f172a' : '#FFFFFF', fontWeight: '700' }}>{totalProteinG}</span>
-                        <span style={{ color: theme === 'light' ? '#94a3b8' : 'rgba(255, 255, 255, 0.35)', margin: '0 1px' }}>/</span>
-                        <span style={{ color: theme === 'light' ? '#64748b' : 'rgba(255, 255, 255, 0.6)', fontWeight: '500' }}>{profile.goalProtein}</span>
-                        <span style={{ color: theme === 'light' ? '#64748b' : 'rgba(255, 255, 255, 0.6)', marginInlineStart: '1px' }}>g</span>
-                      </span>
+                  {/* کارتی پڕۆتین، کاربۆهیدرات و چەوری بە هێڵی پێشکەوتن و ڕیشاڵەوە */}
+                  <div style={{ width: '100%', padding: '2px 4px 6px 4px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '8px' }}>
+                      {[
+                        {
+                          label: t('protein'),
+                          val: Math.round(totalProteinG * 10) / 10,
+                          goal: Number(profile.goalProtein) || 150,
+                          color: 'var(--color-proteins, #38BDF8)'
+                        },
+                        {
+                          label: t('carbs'),
+                          val: Math.round(totalCarbsG * 10) / 10,
+                          goal: Number(profile.goalCarbs) || 220,
+                          color: 'var(--color-carbs, #2DD4BF)'
+                        },
+                        {
+                          label: t('fat'),
+                          val: Math.round(totalFatG * 10) / 10,
+                          goal: Number(profile.goalFat) || 65,
+                          color: 'var(--color-fats, #F59E0B)'
+                        }
+                      ].map(m => {
+                        const pct = m.goal > 0 ? Math.min(100, Math.round((m.val / m.goal) * 100)) : 0;
+                        return (
+                          <div key={m.label} style={{ padding: '7px 8px', borderRadius: '11px', background: theme === 'light' ? 'rgba(241, 245, 249, 0.8)' : 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '10.5px', fontWeight: '800', color: m.color, marginBottom: '2px', textAlign: 'center' }}>{m.label}</div>
+                            <div dir="ltr" style={{ fontSize: '11.5px', fontWeight: '800', color: 'var(--text-main)', textAlign: 'center', marginBottom: '4px' }}>
+                              <span>{m.val}</span>
+                              <span style={{ opacity: 0.45, fontSize: '10px' }}>/{m.goal}g</span>
+                            </div>
+                            <div style={{ width: '100%', height: '4px', background: 'var(--circle-track)', borderRadius: '99px', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: m.color, borderRadius: '99px', transition: 'width 0.35s ease' }} />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
-                    <span style={{ color: theme === 'light' ? '#cbd5e1' : 'rgba(255, 255, 255, 0.25)', fontSize: '11px' }}>•</span>
-
-                    {/* کاربۆهیدرات */}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: theme === 'light' ? '#475569' : 'rgba(255, 255, 255, 0.8)' }}>
-                      <span style={{ color: 'var(--color-carbs, #2DD4BF)', fontWeight: '600' }}>{t('carbs')}:</span>
-                      <span dir="ltr" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '1px' }}>
-                        <span style={{ color: theme === 'light' ? '#0f172a' : '#FFFFFF', fontWeight: '700' }}>{totalCarbsG}</span>
-                        <span style={{ color: theme === 'light' ? '#94a3b8' : 'rgba(255, 255, 255, 0.35)', margin: '0 1px' }}>/</span>
-                        <span style={{ color: theme === 'light' ? '#64748b' : 'rgba(255, 255, 255, 0.6)', fontWeight: '500' }}>{profile.goalCarbs}</span>
-                        <span style={{ color: theme === 'light' ? '#64748b' : 'rgba(255, 255, 255, 0.6)', marginInlineStart: '1px' }}>g</span>
+                    {/* ڕێژەی ڕیشاڵ و تۆمارکردنی خێرای کێش */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', padding: '0 2px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>
+                        🌾 {currentLangConfig.code === 'en' ? 'Fiber Goal:' : 'ئامانجی ڕیشاڵ:'} <b style={{ color: 'var(--text-main)' }}>{profile.goalFiber || Math.max(20, Math.round(((profile.goalCalories || 2200) / 1000) * 12))}g</b>
                       </span>
+
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Scale size={12} style={{ color: 'var(--accent-primary)' }} />
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={quickWeightInput}
+                          onChange={e => setQuickWeightInput(e.target.value)}
+                          placeholder={`${profile.weight || 75} kg`}
+                          style={{
+                            width: '74px',
+                            padding: '4px 7px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            background: 'var(--card-subtle)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-main)'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleQuickWeightCheckIn}
+                          className="liquid-pill"
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '8px',
+                            fontSize: '10.5px',
+                            fontWeight: '800',
+                            cursor: 'pointer',
+                            background: 'var(--accent-gradient-subtle)',
+                            border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)'
+                          }}
+                        >
+                          {currentLangConfig.code === 'en' ? 'Log' : 'تۆمار'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -6129,6 +7325,8 @@ Rules:
 
           </div>
 
+          {renderAdaptiveNutritionBanner()}
+
           {/* ==================== بەدواداچوونی پێشکەوتووی خواردنەوەی ئاو (Enhanced Water Tracker) ==================== */}
           <div 
             id="water-tracker-card"
@@ -6167,7 +7365,7 @@ Rules:
                   <div style={{ fontSize: '15.5px', fontWeight: '900', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>{t('waterTracker')}</span>
                     <span style={{ fontSize: '11px', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.2)', padding: '1px 7px', borderRadius: '8px', fontWeight: '800' }}>
-                      {Math.min(100, Math.round((waterMl / 3000) * 100))}%
+                      {Math.min(100, Math.round((waterMl / (profile?.goalWaterMl || 3000)) * 100))}%
                     </span>
                   </div>
                 </div>
@@ -6205,7 +7403,7 @@ Rules:
                   </span>
                   <div style={{ width: '100%', height: '1.5px', background: 'rgba(56, 189, 248, 0.4)', margin: '3px 0', borderRadius: '1px' }} />
                   <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', lineHeight: 1 }}>
-                    3000 <span style={{ fontSize: '9.5px', fontWeight: '700' }}>{currentLangConfig.code === 'en' ? 'ml' : 'مل'}</span>
+                    {profile?.goalWaterMl || 3000} <span style={{ fontSize: '9.5px', fontWeight: '700' }}>{currentLangConfig.code === 'en' ? 'ml' : 'مل'}</span>
                   </span>
                 </div>
                 <button 
@@ -6237,7 +7435,7 @@ Rules:
             <div style={{ width: '100%', height: '6px', background: 'var(--circle-track)', borderRadius: '4px', overflow: 'hidden' }}>
               <div 
                 style={{ 
-                  width: `${Math.min(100, (waterMl / 3000) * 100)}%`, 
+                  width: `${Math.min(100, (waterMl / (profile?.goalWaterMl || 3000)) * 100)}%`, 
                   height: '100%', 
                   background: 'linear-gradient(90deg, #0284c7 0%, #38bdf8 100%)', 
                   borderRadius: '4px',
@@ -6247,6 +7445,92 @@ Rules:
               />
             </div>
           </div>
+
+          {/* ==================== نەخشەی بازرگانی و هاوبەشەکان (Commercial Partner Map Banner) ==================== */}
+          <button
+            type="button"
+            onClick={() => setShowCommercialMapModal(true)}
+            className="dark-card liquid-pill"
+            style={{
+              width: '100%',
+              padding: '15px 18px',
+              marginBottom: '20px',
+              background: theme === 'light'
+                ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(236, 254, 255, 0.92) 100%)'
+                : 'linear-gradient(135deg, rgba(16, 30, 46, 0.92) 0%, rgba(17, 24, 39, 0.96) 100%)',
+              border: theme === 'light'
+                ? '1px solid rgba(6, 182, 212, 0.28)'
+                : '1px solid rgba(6, 182, 212, 0.32)',
+              borderRadius: '20px',
+              boxShadow: theme === 'light'
+                ? '0 10px 26px rgba(6, 182, 212, 0.12)'
+                : '0 12px 28px rgba(0, 0, 0, 0.32)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px',
+              cursor: 'pointer',
+              textAlign: isRtl ? 'right' : 'left',
+              transition: 'all 0.25s ease'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+              <div style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                flexShrink: 0,
+                boxShadow: '0 6px 16px rgba(6, 182, 212, 0.38)'
+              }}>
+                <MapPin size={22} />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)' }}>
+                    {currentLangConfig.code === 'en' ? 'Partner Map & Discounts' : currentLangConfig.code === 'ar' ? 'خريطة الشركاء والخصومات' : currentLangConfig.code === 'fa' ? 'نقشه شرکا و تخفیف‌ها' : 'نەخشەی هاوبەشەکان و داشکاندن'}
+                  </span>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: '900',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    background: 'rgba(245, 158, 11, 0.16)',
+                    color: theme === 'light' ? '#b45309' : '#fbbf24',
+                    border: '1px solid rgba(245, 158, 11, 0.35)'
+                  }}>
+                    VIP
+                  </span>
+                </div>
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  {currentLangConfig.code === 'en'
+                    ? 'Gyms, healthy restaurants & supplements with live in-app route'
+                    : currentLangConfig.code === 'ar'
+                      ? 'صالات ومطاعم صحية ومكملات مع توجيه مباشر داخل التطبيق'
+                      : currentLangConfig.code === 'fa'
+                        ? 'باشگاه‌ها، رستوران‌های سالم و مکمل‌ها با مسیریابی درون‌برنامه‌ای'
+                        : 'هۆڵ و خواردنگەی تەندروست و سەپلیمێنت بە ڕێنیشاندەری ناو ئەپ'}
+                </p>
+              </div>
+            </div>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '12px',
+              background: theme === 'light' ? 'rgba(6, 182, 212, 0.12)' : 'rgba(6, 182, 212, 0.16)',
+              color: theme === 'light' ? '#0284c7' : '#22d3ee',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Navigation size={18} />
+            </div>
+          </button>
 
           {/* ==================== پەنجەرەی خێرای پڕۆتین (Quick Protein Supplement Tracker) ==================== */}
           {!isProteinWidgetDismissed && lastUsedProtein && (
@@ -6410,42 +7694,61 @@ Rules:
             <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', marginBottom: '26px', lineHeight: '1.6', maxWidth: '340px' }}>
               {currentLangConfig.code === 'en' ? 'The smart AI coach is ready. With one click, generate a personalized science-based training program.' : currentLangConfig.code === 'ar' ? 'المدرب الذكي مستعد لمساعدتك. يمكنك بضغطة زر طلب تصميم جدول تدريبي علمي مخصص لك.' : currentLangConfig.code === 'fa' ? 'مربی هوشمند آماده است. با یک کلیک می‌توانید برنامه تمرینی علمی متناسب با خود را درخواست کنید.' : 'ڕاهێنەری زیرەک پێویستی بە زانیارییەکانتە. دەتوانیت بە یەک کلیک داواکاری پێشکەش بکەیت بۆ داڕشتنی کۆرسێکی زانستی و تایبەت بە خۆت.'}
             </p>
-            <button 
-              onClick={() => { 
-                setBuilderDaysCount(profile.availableDaysPerWeek || 4); 
-                setCourseLocation(profile.trainingLocation || 'gym');
-                setHomeEquipment(profile.homeEquipment || '');
-                setGoalFormData({
-                  goal: profile.goal || (currentLangConfig.code === 'en' ? 'Muscle Gain' : currentLangConfig.code === 'ar' ? 'زيادة العضلات' : currentLangConfig.code === 'fa' ? 'رشد عضلات' : 'گەشەی ماسولکە'),
-                  targetWeight: profile.targetWeight || profile.weight,
-                  targetDays: profile.targetDays || 45,
-                  bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] }
-                });
-                setShowNewCourseModal(true); 
-              }}
-              className="liquid-pill" 
-              style={{ 
-                padding: '14px 24px', 
-                background: 'var(--accent-gradient)', 
-                color: '#ffffff', 
-                fontSize: '15px', 
-                fontWeight: '900', 
-                border: 'none', 
-                borderRadius: '16px', 
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 4px 18px var(--accent-glow)',
-                transition: 'all 0.25s ease'
-              }}>
-              <Sparkles size={18} fill="#ffffff" />
-              <span>{currentLangConfig.code === 'en' ? 'Request Program Design' : currentLangConfig.code === 'ar' ? 'طلب تصميم برنامج تدريبي' : currentLangConfig.code === 'fa' ? 'درخواست طراحی برنامه' : 'داواکاری داڕشتنی کۆرس'}</span>
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+              <button 
+                onClick={openNewCourseModalWithDefaults}
+                className="liquid-pill" 
+                style={{ 
+                  padding: '14px 24px', 
+                  background: 'var(--accent-gradient)', 
+                  color: '#ffffff', 
+                  fontSize: '15px', 
+                  fontWeight: '900', 
+                  border: 'none', 
+                  borderRadius: '16px', 
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 18px var(--accent-glow)',
+                  transition: 'all 0.25s ease'
+                }}>
+                <Sparkles size={18} fill="#ffffff" />
+                <span>{currentLangConfig.code === 'en' ? 'Request Program Design' : currentLangConfig.code === 'ar' ? 'طلب تصميم برنامج تدريبي' : currentLangConfig.code === 'fa' ? 'درخواست طراحی برنامه' : 'داواکاری داڕشتنی کۆرس'}</span>
+              </button>
+
+              {courseHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpandedHistoryCourseIdx(null);
+                    setHistoryDeleteConfirmIdx(null);
+                    setShowCourseHistory(true);
+                  }}
+                  className="liquid-pill"
+                  style={{
+                    padding: '10px 18px',
+                    background: 'var(--card-subtle)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '14px',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '7px'
+                  }}
+                >
+                  <History size={16} />
+                  <span>{language === 'en' ? `Course History (${courseHistory.length})` : `کۆرسە کۆنەکان (${courseHistory.length})`}</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div style={{ position: 'relative', zIndex: 1, padding: '10px 14px 18px 14px', direction: currentLangConfig.dir }}>
-          <header className="flex-between" style={{ marginBottom: '12px', alignItems: 'center' }}>
+          <header className="flex-between" style={{ marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {/* ئاماژەدان بەوەی وەرزشەکان ئی ماڵەوەن یان هۆڵ */}
               {(() => {
@@ -6481,25 +7784,46 @@ Rules:
               )}
             </div>
             
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button 
-                onClick={() => { 
-                  setBuilderDaysCount((workoutCourse?.daysPerWeek || 0) || profile.availableDaysPerWeek || 4); 
-                  setCourseLocation(workoutCourse?.trainingLocation || profile.trainingLocation || 'gym');
-                  setHomeEquipment(workoutCourse?.homeEquipment || profile.homeEquipment || '');
-                  setGoalFormData({
-                    goal: profile.goal || 'گەشەی ماسولکە',
-                    targetWeight: profile.targetWeight || profile.weight,
-                    targetDays: profile.targetDays || 45,
-                    bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] }
-                  });
-                  setShowNewCourseModal(true); 
-                }} 
+                onClick={openNewCourseModalWithDefaults} 
                 className="no-print"
-                style={{ background: 'var(--accent-gradient)', color: '#ffffff', border: '1px solid var(--border-color)', padding: '10px 16px', borderRadius: '16px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', backdropFilter: 'blur(10px)', boxShadow: '0 8px 20px var(--accent-glow)', display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}
+                style={{ background: 'var(--accent-gradient)', color: '#ffffff', border: '1px solid var(--border-color)', padding: '9px 13px', borderRadius: '14px', fontSize: '12.5px', fontWeight: '800', cursor: 'pointer', backdropFilter: 'blur(10px)', boxShadow: '0 8px 20px var(--accent-glow)', display: 'inline-flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
               >
-                <Sparkles size={16} />
+                <Sparkles size={15} />
                 <span>{t('newCourse')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExpandedHistoryCourseIdx(null);
+                  setHistoryDeleteConfirmIdx(null);
+                  setShowCourseHistory(true);
+                }}
+                className="no-print liquid-pill"
+                style={{
+                  background: 'var(--card-subtle)',
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--border-color)',
+                  padding: '9px 12px',
+                  borderRadius: '14px',
+                  fontSize: '12.5px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  flexShrink: 0
+                }}
+                title={language === 'en' ? 'Course History Archive' : 'ئەرشیفی کۆرسە کۆنەکان'}
+              >
+                <History size={15} />
+                <span>{language === 'en' ? 'Course History' : 'کۆرسە کۆنەکان'}</span>
+                {courseHistory.length > 0 && (
+                  <span style={{ fontSize: '10.5px', fontWeight: '900', padding: '1px 6px', borderRadius: '999px', background: 'var(--accent-glow)', color: 'var(--accent-primary)' }}>
+                    {courseHistory.length}
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -6509,24 +7833,274 @@ Rules:
                   background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(6, 182, 212, 0.18) 100%)',
                   color: '#10b981',
                   border: '1px solid rgba(16, 185, 129, 0.45)',
-                  padding: '10px 14px',
-                  borderRadius: '16px',
-                  fontSize: '13px',
+                  padding: '9px 12px',
+                  borderRadius: '14px',
+                  fontSize: '12.5px',
                   fontWeight: '800',
                   cursor: 'pointer',
                   backdropFilter: 'blur(10px)',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   flexShrink: 0
                 }}
                 title={language === 'en' ? 'AI Physique Vision Scan' : 'سکان و هەڵسەنگاندنی جەستە بە بینینی AI'}
               >
-                <Camera size={16} />
+                <Camera size={15} />
                 <span>{language === 'en' ? 'Scan Physique' : 'سکانکردنی جەستە'}</span>
               </button>
             </div>
           </header>
+
+          {/* ==================== نیشاندەری هەفتەی کۆرس (Week X of 10) + دوگمەی دەستی دیڵۆد ==================== */}
+          <div
+            className="liquid-card no-print"
+            style={{
+              padding: '12px 14px',
+              marginBottom: '12px',
+              borderRadius: '16px',
+              border: deloadState.isDeloadActive
+                ? '1.5px solid rgba(56, 189, 248, 0.5)'
+                : '1px solid var(--border-color)',
+              background: deloadState.isDeloadActive
+                ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)'
+                : 'var(--card-subtle)'
+            }}
+          >
+            <div className="flex-between" style={{ alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  padding: '4px 10px',
+                  borderRadius: '10px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: '900',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <CalendarDays size={13} />
+                  <span>
+                    {language === 'en'
+                      ? `Week ${courseLifecycle.currentWeek} of 10`
+                      : `هەفتەی ${courseLifecycle.currentWeek} لە ١٠`}
+                  </span>
+                </span>
+                {courseLifecycle.startDate && (
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700' }}>
+                    {language === 'en' ? 'Started: ' : 'دەستپێک: '}
+                    {new Date(courseLifecycle.startDate).toLocaleDateString()}
+                    {' • '}
+                    {language === 'en' ? `${courseLifecycle.elapsedDays}d` : `${courseLifecycle.elapsedDays} ڕۆژ`}
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleToggleDeloadMode()}
+                className="liquid-pill"
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: '10px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: deloadState.isDeloadActive ? 'rgba(56, 189, 248, 0.2)' : 'var(--card-inner)',
+                  color: deloadState.isDeloadActive ? '#38bdf8' : 'var(--text-muted)',
+                  border: deloadState.isDeloadActive ? '1px solid rgba(56, 189, 248, 0.5)' : '1px solid var(--border-color)'
+                }}
+                title={language === 'en' ? 'Toggle Deload Mode (-40% sets, RIR 3-4)' : 'چالاککردن/ناچالاککردنی دۆخی دیڵۆد'}
+              >
+                <BatteryCharging size={13} />
+                <span>
+                  {deloadState.isDeloadActive
+                    ? (language === 'en' ? 'Deload ON (-40% Sets)' : 'دیڵۆد چالاکە (-٤٠٪ سێت)')
+                    : (language === 'en' ? 'Deload Mode' : 'دۆخی دیڵۆد')}
+                </span>
+              </button>
+            </div>
+
+            {/* ١٠ خانەی پێشکەوتنی هەفتەکان (Weeks 1-10 Cycle Track) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px' }}>
+              {Array.from({ length: 10 }).map((_, wIdx) => {
+                const wk = wIdx + 1;
+                const isDoneOrCurrent = wk <= courseLifecycle.currentWeek;
+                const isCurrent = wk === courseLifecycle.currentWeek || (courseLifecycle.currentWeek > 10 && wk === 10);
+                const isDeloadCheckpoint = wk === 5 || wk === 10;
+                const isRenewalZone = wk >= 8;
+                return (
+                  <div
+                    key={wk}
+                    title={isDeloadCheckpoint ? (language === 'en' ? `Week ${wk} (Deload)` : `هەفتەی ${wk} (دیڵۆد)`) : `${wk}`}
+                    style={{
+                      height: '6px',
+                      borderRadius: '999px',
+                      background: isCurrent
+                        ? (isDeloadCheckpoint ? '#38bdf8' : (isRenewalZone ? '#10b981' : 'var(--accent-primary)'))
+                        : isDoneOrCurrent
+                          ? 'var(--accent-gradient)'
+                          : (isDeloadCheckpoint ? 'rgba(56, 189, 248, 0.25)' : 'var(--circle-track)'),
+                      boxShadow: isCurrent ? '0 0 8px var(--accent-glow)' : 'none',
+                      transition: 'all 0.25s ease'
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ==================== بانەری زیرەکی دیڵۆد لە هەفتەی ٥ و ١٠ یان کاتی چالاکبوون ==================== */}
+          {(deloadState.isScheduledDeloadWeek || deloadState.isDeloadActive) && (
+            <div
+              className="liquid-card no-print"
+              style={{
+                padding: '12px 14px',
+                marginBottom: '12px',
+                borderRadius: '16px',
+                border: '1.5px solid rgba(56, 189, 248, 0.45)',
+                background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.14) 0%, rgba(99, 102, 241, 0.09) 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}
+            >
+              <div className="flex-between" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                  <BatteryCharging size={19} color="#38bdf8" style={{ flexShrink: 0 }} />
+                  <div style={{ fontSize: '12px', lineHeight: '1.5', color: 'var(--text-main)', fontWeight: '700' }}>
+                    <div style={{ fontWeight: '900', color: '#38bdf8' }}>
+                      {language === 'en'
+                        ? `Week ${courseLifecycle.currentWeek} Recovery & Deload Protocol`
+                        : `پڕۆتۆکۆڵی دیڵۆدی هەفتەی ${courseLifecycle.currentWeek} (Deload Mode)`}
+                    </div>
+                    <div style={{ color: 'var(--text-subtle)', fontSize: '11.5px' }}>
+                      {deloadState.isDeloadActive
+                        ? (language === 'en'
+                            ? 'Active: Keeping exact exercises & weights, working sets reduced by 40% with intensity at RIR 3–4 for joint & CNS recovery.'
+                            : 'چالاکە: هەمان ڕاهێنان و کێش دەپارێزرێن، سێتەکان بە ڕێژەی ٤٠٪ کەمکراونەتەوە و توندی کراوەتە RIR 3–4 بۆ چاکبوونەوەی جومگە و کۆئەندامی دەمار.')
+                        : (language === 'en'
+                            ? 'Scheduled Deload week detected! Activate Deload Mode to reduce sets by 40% (RIR 3–4) while keeping the same exercises & weights.'
+                            : 'هەفتەی دیڵۆد دیاریکرا! دۆخی دیڵۆد چالاک بکە بۆ کەمکردنەوەی ٤٠٪ ی سێتەکان (RIR 3–4) بە هێشتنەوەی هەمان ڕاهێنان و کێشەکان.')}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleDeloadMode(!deloadState.isDeloadActive)}
+                  style={{
+                    padding: '8px 13px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: deloadState.isDeloadActive ? 'rgba(239, 68, 68, 0.18)' : 'linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)',
+                    color: deloadState.isDeloadActive ? '#f87171' : '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: '900',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  {deloadState.isDeloadActive
+                    ? (language === 'en' ? 'Disable Deload' : 'ناچالاککردنی دیڵۆد')
+                    : (language === 'en' ? 'Activate Deload Mode' : 'چالاککردنی دۆخی دیڵۆد')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ==================== بانەری ئاگادارکردنەوەی نوێکردنەوەی کۆرس (Week 8-12 Renewal Alert) ==================== */}
+          {isRenewalBannerVisible && (
+            <div
+              className="liquid-card no-print"
+              style={{
+                padding: '14px',
+                marginBottom: '12px',
+                borderRadius: '18px',
+                border: '1.5px solid rgba(16, 185, 129, 0.5)',
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(245, 158, 11, 0.1) 100%)',
+                position: 'relative'
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleDismissRenewalBanner}
+                aria-label="Dismiss Renewal Alert"
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  ...(isRtl ? { left: '10px' } : { right: '10px' }),
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '50%',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--card-subtle)',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={14} />
+              </button>
+
+              <div style={{ fontSize: '13.5px', fontWeight: '900', color: '#10b981', marginBottom: '4px', paddingInlineEnd: '28px' }}>
+                {language === 'en'
+                  ? `🏁 8–10 Week Mesocycle Complete (Week ${courseLifecycle.currentWeek})`
+                  : `🏁 خولی ٨–١٠ هەفتەیی کۆرس تەواو بوو (هەفتەی ${courseLifecycle.currentWeek})`}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-main)', lineHeight: '1.55', margin: '0 0 12px 0' }}>
+                {language === 'en'
+                  ? 'Your body has adapted to the current stimulus. Take fresh 3-angle physique photos to compare progress and generate a new workout course.'
+                  : 'ماسولکەکانت خۆیان لەگەڵ ئەم کۆرسە گونجاندووە. کاتی ئەوەیە وێنەی نوێی جەستە بگریت بۆ بەراوردکردنی پێشکەوتن و کۆرسێکی نوێ دابڕێژیت.'}
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPhysiqueModal(true)}
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    padding: '10px 12px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(16, 185, 129, 0.45)',
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981',
+                    fontSize: '12.5px',
+                    fontWeight: '900',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📸 {language === 'en' ? 'New Physique Scan' : 'سکانی جەستەی نوێ'}
+                </button>
+                <button
+                  type="button"
+                  onClick={openNewCourseModalWithDefaults}
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    padding: '10px 12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'var(--accent-gradient)',
+                    color: '#ffffff',
+                    fontSize: '12.5px',
+                    fontWeight: '900',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px var(--accent-glow)'
+                  }}
+                >
+                  🔄 {language === 'en' ? 'Generate New Course' : 'دروستکردنی کۆرسی نوێ'}
+                </button>
+              </div>
+            </div>
+          )}
 
 
 
@@ -6647,11 +8221,20 @@ Rules:
                   <strong style={{ color: '#38bdf8' }}>٢. یاسای زیادکردنی بار (Double Progression):</strong> سەرەتا تەکرارەکان بە هەمان کێش زیاد بکە تا دەگەیتە بەرزترین تەکرار (بۆ نموونە ۱۲)، ئینجا بۆ هەفتەی دواتر کێشەکە کەمێک بەرز بکەرەوە.
                 </div>
                 <div>
-                  <strong style={{ color: '#34d399' }}>٣. کاتی پشوو (Rest Intervals):</strong> لە جوڵە قورسەکانی وەک سکوات و پرێس ٢-٣ خولەک پشوو بدە؛ پشووی زۆر کەم ناهێڵێت ماسولکە بە هێزی تەواوەوە بچێتە سێتی دواتر.
+                  <strong style={{ color: '#34d399' }}>٣. کاتی پشوو (Rest Intervals):</strong> لە جوڵە قورسەکانی وەک سکوات و پرێس ١٥٠–١٨٠ چرکە، کۆمپاوەندی دووەم ٩٠–١٢٠ چرکە، و ئایسۆلەیشن ٦٠–٩٠ چرکە پشوو بدە.
+                </div>
+                <div>
+                  <strong style={{ color: '#f59e0b' }}>٤. خولی ٥ هەفتەیی و دیڵۆد (5-Week Mesocycle):</strong> {workoutCourse?.mesocycleNote || 'هەفتەکانی ١–٤ باری پێشکەوتن زیاد بکە (+١–٢ تەکرار یان +٢.٥ کگ)؛ هەفتەی ٥ دیڵۆدە بە کەمکردنەوەی ٤٠٪ ی کۆمەڵەکان (Sets) بۆ چاکبوونەوە.'}
                 </div>
               </div>
             )}
           </div>
+
+          {workoutCourse?.mesocycleNote && (
+            <div className="liquid-card no-print" style={{ padding: '10px 14px', marginBottom: '14px', borderRadius: '14px', border: '1px solid rgba(245, 158, 11, 0.3)', background: 'rgba(245, 158, 11, 0.07)', fontSize: '11.5px', lineHeight: '1.55', color: 'var(--text-main)', fontWeight: '700' }}>
+              📆 {workoutCourse.mesocycleNote}
+            </div>
+          )}
 
           {/* کەرتی پیشاندانی شیکاری بینینی جەستە لە تەنیشت کۆرس */}
           {profile?.physiqueAnalysis && (
@@ -6785,7 +8368,15 @@ Rules:
 
                     <span className="liquid-pill" style={{ color: 'var(--accent-primary)', padding: '5px 12px', fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span><Flame size={16} className="inline-block" /></span>
-                      <span>{(workoutCourse?.weeklyPlan || [])[selectedDayIdx].estimatedCalories || 400} {t('kcal')}</span>
+                      <span>
+                        {(() => {
+                          const activeDay = (workoutCourse?.weeklyPlan || [])[selectedDayIdx];
+                          const burned = Number(activeDay?.estimatedCalories) > 0
+                            ? Number(activeDay.estimatedCalories)
+                            : calculateWorkoutBurnedCalories({ day: activeDay, weight: profile?.weight || 75, pace: profile?.goalPace || 'normal' });
+                          return `${displayEnergy(burned)} ${energyUnitLabel}`;
+                        })()}
+                      </span>
                     </span>
                   </div>
                 )}
@@ -6916,6 +8507,27 @@ Rules:
                     );
 
                     const dayExercises = (workoutCourse?.weeklyPlan || [])[selectedDayIdx].exercises || [];
+                    const renderPlateauBadge = (ex, exIdx, plateauInfo) => {
+                      if (!plateauInfo) return null;
+                      return (
+                        <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.38)', padding: '2px 8px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            ⚠️ {language === 'en' ? `Growth Plateau (${plateauInfo.stalledWeeks}w)` : `وەستانی گەشە (Plateau) • ${plateauInfo.stalledWeeks} هەفتە`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExerciseSwapModalData({ ex, exIdx });
+                            }}
+                            style={{ fontSize: '10.5px', fontWeight: '900', color: '#ffffff', background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', border: 'none', padding: '2px 8px', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            <RefreshCw size={10} />
+                            <span>{language === 'en' ? 'Swap' : 'گۆڕین'}</span>
+                          </button>
+                        </div>
+                      );
+                    };
 
                     return (
                       <>
@@ -6926,12 +8538,15 @@ Rules:
                             {dayExercises.map((ex, exIdx) => {
                               const exKey = ex.englishName || ex.name;
                               const isExpanded = expandedExerciseIndex === exIdx;
-                              const setsCount = Math.min(Number(ex.sets) || 4, 8);
+                              const rx = getEffectiveExercisePrescription(ex, deloadState.isDeloadActive);
+                              const setsCount = rx.sets;
+                              const displayRir = rx.rir;
+                              const plateauInfo = getPlateauForExercise(ex, exKey);
                               const currentLogs = exerciseLogs[exKey] || [];
-                              const completedSetsCount = currentLogs.filter(s => s && s.completed).length;
+                              const completedSetsCount = currentLogs.slice(0, setsCount).filter(s => s && s.completed).length;
                               const isAllSetsCompleted = completedSetsCount >= setsCount && setsCount > 0;
                               const isExerciseTimerActive = (activeTimerSet?.exKey === exKey || activeTimerSet?.exIdx === exIdx) && restTimerRunning && restTimerSeconds > 0;
-                              const restTimeSeconds = parseInt(ex.rest) || workoutCourse?.restIntervalSeconds || (profile.goalPace === 'slow' ? 90 : profile.goalPace === 'fast' ? 45 : profile.goalPace === 'very_fast' ? 35 : 60);
+                              const restTimeSeconds = Math.max(60, parseInt(ex.rest) || workoutCourse?.restIntervalSeconds || (profile.goalPace === 'slow' ? 120 : 90));
 
                               return (
                                 <div
@@ -6954,7 +8569,9 @@ Rules:
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                                     {/* وێنەی ئۆفلاینی ڕاهێنانەکە لە دەستەچەپ */}
                                     <ExerciseThumbnail
-                                      exerciseName={ex.englishName || ex.name}
+                                      exerciseId={ex.exerciseId || ''}
+                                      exerciseName={getExerciseEnglishName(ex)}
+                                      muscle={ex.muscle || ex.target || ''}
                                       size={52}
                                       onClick={() => setActiveFormExercise(ex)}
                                     />
@@ -6970,10 +8587,20 @@ Rules:
                                       </div>
                                       {/* ٣. کۆمەڵە و دووبارەکردنەوە بە RIR و کاتی پشوو */}
                                       <div style={{ color: 'var(--text-muted)', fontSize: '12px', fontWeight: '600', marginTop: '4px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                        <span style={{ color: 'var(--text-main)', fontWeight: '800' }}>{ex.sets}x{ex.reps}</span>
-                                        {ex.rir && (
-                                          <span style={{ fontSize: '10px', color: '#c084fc', background: 'rgba(192, 132, 252, 0.12)', border: '1px solid rgba(192, 132, 252, 0.25)', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>
-                                            {ex.rir}
+                                        <span style={{ color: rx.isDeloadReduced ? '#38bdf8' : 'var(--text-main)', fontWeight: '800' }}>
+                                          {rx.isDeloadReduced && (
+                                            <span style={{ textDecoration: 'line-through', opacity: 0.55, marginRight: '4px', fontSize: '11px' }}>{rx.originalSets}</span>
+                                          )}
+                                          {setsCount}x{ex.reps}
+                                        </span>
+                                        {rx.isDeloadReduced && (
+                                          <span style={{ fontSize: '9.5px', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.14)', border: '1px solid rgba(56, 189, 248, 0.35)', padding: '1px 5px', borderRadius: '6px', fontWeight: '800' }}>
+                                            Deload -40%
+                                          </span>
+                                        )}
+                                        {displayRir && (
+                                          <span style={{ fontSize: '10px', color: rx.isDeloadReduced ? '#38bdf8' : '#c084fc', background: rx.isDeloadReduced ? 'rgba(56, 189, 248, 0.14)' : 'rgba(192, 132, 252, 0.12)', border: rx.isDeloadReduced ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(192, 132, 252, 0.25)', padding: '1px 6px', borderRadius: '6px', fontWeight: '800' }}>
+                                            {displayRir}
                                           </span>
                                         )}
                                         {ex.rest && (
@@ -6992,6 +8619,12 @@ Rules:
                                           </span>
                                         ) : null}
                                       </div>
+                                      {renderPlateauBadge(ex, exIdx, plateauInfo)}
+                                      {ex.warmUpNote && (
+                                        <div style={{ marginTop: '5px', fontSize: '10.5px', fontWeight: '700', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.28)', padding: '3px 8px', borderRadius: '8px', display: 'inline-block', textAlign: 'left', lineHeight: '1.35' }}>
+                                          🔥 {ex.warmUpNote}
+                                        </div>
+                                      )}
                                     </div>
 
                                     {/* دوگمەکانی لای ڕاست: ڕێبەری شێواز، بۆشایی سێتەکان (+ و - و کاونتداون)، سێرچی گووگڵ */}
@@ -7191,12 +8824,15 @@ Rules:
                             {dayExercises.map((ex, exIdx) => {
                               const exKey = ex.englishName || ex.name;
                               const isExpanded = expandedExerciseIndex === exIdx;
-                              const setsCount = Math.min(Number(ex.sets) || 4, 8);
+                              const rx = getEffectiveExercisePrescription(ex, deloadState.isDeloadActive);
+                              const setsCount = rx.sets;
+                              const displayRir = rx.rir;
+                              const plateauInfo = getPlateauForExercise(ex, exKey);
                               const currentLogs = exerciseLogs[exKey] || [];
-                              const completedSetsCount = currentLogs.filter(s => s && s.completed).length;
+                              const completedSetsCount = currentLogs.slice(0, setsCount).filter(s => s && s.completed).length;
                               const isAllSetsCompleted = completedSetsCount >= setsCount && setsCount > 0;
                               const isExerciseTimerActive = (activeTimerSet?.exKey === exKey || activeTimerSet?.exIdx === exIdx) && restTimerRunning && restTimerSeconds > 0;
-                              const restTimeSeconds = parseInt(ex.rest) || workoutCourse?.restIntervalSeconds || (profile.goalPace === 'slow' ? 90 : profile.goalPace === 'fast' ? 45 : profile.goalPace === 'very_fast' ? 35 : 60);
+                              const restTimeSeconds = Math.max(60, parseInt(ex.rest) || workoutCourse?.restIntervalSeconds || (profile.goalPace === 'slow' ? 120 : 90));
 
                               return (
                                 <div
@@ -7231,7 +8867,9 @@ Rules:
                                     title={language === 'en' ? 'Click for Form Guide & Video' : 'کلیک بکە بۆ ڕێبەری شێواز و فێرکاری'}
                                   >
                                     <ExerciseThumbnail
-                                      exerciseName={ex.englishName || ex.name}
+                                      exerciseId={ex.exerciseId || ''}
+                                      exerciseName={getExerciseEnglishName(ex)}
+                                      muscle={ex.muscle || ex.target || ''}
                                       width="100%"
                                       height="190px"
                                       fit="contain"
@@ -7270,7 +8908,7 @@ Rules:
                                         gap: '4px'
                                       }}>
                                         {isAllSetsCompleted && <Check size={12} style={{ strokeWidth: 3 }} />}
-                                        <span>{ex.sets} × {ex.reps}{ex.rir ? ` • ${ex.rir}` : ''} {isAllSetsCompleted ? (language === 'en' ? 'Done' : 'تەواو') : ''}</span>
+                                        <span>{setsCount} × {ex.reps}{rx.isDeloadReduced ? ' • Deload' : ''}{displayRir ? ` • ${displayRir}` : ''} {isAllSetsCompleted ? (language === 'en' ? 'Done' : 'تەواو') : ''}</span>
                                       </span>
                                     </div>
 
@@ -7354,6 +8992,12 @@ Rules:
                                         </span>
                                       ) : null}
                                     </div>
+                                    {renderPlateauBadge(ex, exIdx, plateauInfo)}
+                                    {ex.warmUpNote && (
+                                      <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.28)', padding: '4px 8px', borderRadius: '8px', textAlign: 'left', lineHeight: '1.35' }}>
+                                        🔥 {ex.warmUpNote}
+                                      </div>
+                                    )}
 
                                     {/* دوگمەکانی خوارەوە: بۆشایی سێتەکان (+ و - و کاونتداون)، ڕێبەر، سێرچی گووگڵ */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -7634,6 +9278,20 @@ Rules:
                     </button>
                   </div>
 
+                  {/* دیاریکردنی حەساسیەت و خۆراکی نەخوازراو پێش دروستکردنی خشتە */}
+                  <div style={{ marginBottom: '14px', padding: '12px 14px', borderRadius: '14px', background: 'var(--card-subtle)', border: '1px solid var(--border-color)' }}>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                      🚫 {currentLangConfig.code === 'en' ? 'Allergies or Disliked Foods (strictly excluded):' : 'حەساسیەت یان خۆراکی نەخوازراو (بە تەواوی لادەبرێن):'}
+                    </label>
+                    <input
+                      type="text"
+                      value={profile?.allergiesOrDislikes || ''}
+                      onChange={e => handleUpdateAllergiesOrDislikes(e.target.value)}
+                      placeholder={currentLangConfig.code === 'en' ? 'e.g. fish, dairy, peanuts, eggs' : 'نموونە: ماسی، شیر، هێلکە، بادەم'}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                    />
+                  </div>
+
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
                     {[
                       { 
@@ -7746,7 +9404,21 @@ Rules:
                 </div>
               </header>
 
+              {renderAdaptiveNutritionBanner()}
 
+              {/* بەشی خێرای حەساسیەت و خۆراکی نەخوازراو */}
+              <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '14px', background: 'var(--card-subtle)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: '800', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  🚫 {currentLangConfig.code === 'en' ? 'Exclude:' : 'لادانی خواردن:'}
+                </span>
+                <input
+                  type="text"
+                  value={profile?.allergiesOrDislikes || ''}
+                  onChange={e => handleUpdateAllergiesOrDislikes(e.target.value)}
+                  placeholder={currentLangConfig.code === 'en' ? 'Allergies / dislikes (e.g. fish, dairy)...' : 'حەساسیەت / خۆراکی نەخوازراو (ماسی، شیر، هێلکە)...'}
+                  style={{ flex: 1, minWidth: '170px', padding: '6px 10px', borderRadius: '10px', fontSize: '12px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                />
+              </div>
 
               {renderMealJourney()}
             </div>
@@ -7756,7 +9428,7 @@ Rules:
       )}
 
       {/* ٤. بەشی تایبەتی زیاتر (More Section with Sub-tabs) */}
-      {(activeTab === 'more' || activeTab === 'ai') && (
+      {(activeTab === 'more' || activeTab === 'ai') && !isCoachChatOpen && (
         <div style={{ 
           position: 'relative', 
           zIndex: 1, 
@@ -7764,14 +9436,13 @@ Rules:
           direction: currentLangConfig.dir, 
           display: 'flex', 
           flexDirection: 'column', 
-          flex: moreActiveTab === 'coach' ? 1 : 'unset',
-          height: moreActiveTab === 'coach' ? '100%' : 'auto', 
+          height: 'auto', 
           minHeight: 0,
           maxWidth: '860px',
           margin: '0 auto',
           width: '100%',
           overflowX: 'hidden',
-          overflowY: moreActiveTab === 'coach' ? 'hidden' : 'visible'
+          overflowY: 'visible'
         }}>
           
           {/* تابی مێنیوی سەرەکیی زیاتر (More Menu Hub - 2x2 Minimal Clean Grid) */}
@@ -7817,10 +9488,10 @@ Rules:
                   </span>
                 </button>
 
-                {/* دوگمەی نەخشەی سێ ڕەهەندی ماسولکەکان */}
+                {/* دوگمەی نەخشەی بازرگانی و هاوبەشەکان (Partner Map) */}
                 <button
                   type="button"
-                  onClick={() => setMoreActiveTab('anatomy')}
+                  onClick={() => setShowCommercialMapModal(true)}
                   className="liquid-pill"
                   style={{
                     padding: '24px 16px',
@@ -7849,10 +9520,10 @@ Rules:
                     color: '#ffffff',
                     boxShadow: '0 6px 20px rgba(6, 182, 212, 0.4)'
                   }}>
-                    <PersonStanding size={30} />
+                    <MapPin size={30} />
                   </div>
                   <span style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', textAlign: 'center' }}>
-                    {currentLangConfig.code === 'en' ? 'Visual Muscle Atlas' : currentLangConfig.code === 'ar' ? 'أطلس العضلات المصور' : currentLangConfig.code === 'fa' ? 'اطلس تصویری عضلات' : 'فەرهەنگی وێنەیی ماسولکەکان'}
+                    {currentLangConfig.code === 'en' ? 'Partner Map' : currentLangConfig.code === 'ar' ? 'خريطة الشركاء' : currentLangConfig.code === 'fa' ? 'نقشه شرکا' : 'نەخشەی هاوبەشەکان'}
                   </span>
                 </button>
 
@@ -7913,9 +9584,15 @@ Rules:
                     gap: '12px',
                     boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
                     transition: 'all 0.25s ease',
-                    outline: 'none'
+                    outline: 'none',
+                    position: 'relative'
                   }}
                 >
+                  {unreadNotificationCount > 0 && (
+                    <span style={{ position: 'absolute', top: '12px', right: '12px', minWidth: '20px', height: '20px', padding: '0 6px', borderRadius: '999px', background: '#ef4444', color: '#ffffff', fontSize: '11px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    </span>
+                  )}
                   <div style={{
                     width: '54px',
                     height: '54px',
@@ -7937,628 +9614,6 @@ Rules:
             </div>
           )}
 
-          {/* تابی ڕاهێنەر لەناو بەشی زیاتر */}
-          {moreActiveTab === 'coach' && (
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              {/* ١. سەردێڕی سەرەوەی ڕاهێنەری تایبەت */}
-          <header style={{ 
-            marginBottom: '10px',
-            padding: '12px 16px',
-            borderRadius: '20px',
-            background: 'var(--accent-gradient-subtle)',
-            border: '1px solid var(--accent-glow)',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
-            backdropFilter: 'blur(20px)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 30
-          }}>
-            <div className="flex-between" style={{ alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={() => setMoreActiveTab('menu')}
-                  className="liquid-pill"
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    background: 'var(--card-subtle)',
-                    border: '1px solid var(--border-color)',
-                    color: 'var(--text-main)',
-                    transition: 'all 0.2s ease',
-                    flexShrink: 0
-                  }}
-                  title={currentLangConfig.code === 'en' ? 'Back' : currentLangConfig.code === 'ar' ? 'رجوع' : currentLangConfig.code === 'fa' ? 'بازگشت' : 'گەڕانەوە'}
-                >
-                  {isRtl ? <ArrowRight size={18} /> : <ArrowLeft size={18} />}
-                </button>
-
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '12px',
-                  background: 'var(--accent-gradient)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff',
-                  boxShadow: '0 4px 15px var(--accent-glow)',
-                  flexShrink: 0
-                }}>
-                  <Sparkles size={20} color="#ffffff" />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <h2 style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>
-                      {t('aiCoach')}
-                    </h2>
-                  </div>
-                </div>
-              </div>
-
-              {/* دوگمەی چاتی نوێ */}
-              <button
-                type="button"
-                onClick={() => setChatMessages([])}
-                className="liquid-pill"
-                style={{ 
-                  padding: '6px 12px', 
-                  fontSize: '11.5px', 
-                  fontWeight: '800', 
-                  cursor: 'pointer', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '4px', 
-                  color: 'var(--text-main)', 
-                  background: 'var(--card-subtle)', 
-                  border: '1px solid var(--border-color)' 
-                }}
-                title={currentLangConfig.code === 'en' ? 'Start New Chat' : currentLangConfig.code === 'ar' ? 'بدء محادثة جديدة' : currentLangConfig.code === 'fa' ? 'شروع گفتگوی جدید' : 'دەستپێکردنەوەی چات'}
-              >
-                <span><RefreshCw size={16} className="inline-block" /></span>
-                <span>{currentLangConfig.code === 'en' ? 'New Chat' : currentLangConfig.code === 'ar' ? 'محادثة جديدة' : currentLangConfig.code === 'fa' ? 'گفتگوی جدید' : 'چاتی نوێ'}</span>
-              </button>
-            </div>
-
-            
-          </header>
-
-          {/* ٢. ناوەڕۆکی چاتی ڕاهێنەری تایبەت */}
-          <div 
-            ref={chatScrollRef}
-            style={{ 
-              flex: 1, 
-              overflowY: 'auto', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '14px', 
-              paddingRight: isRtl ? '0' : '6px',
-              paddingLeft: isRtl ? '6px' : '0',
-              marginBottom: '10px'
-            }}
-          >
-            {chatMessages.length === 0 ? (
-              /* شاشەی بەخێرهاتنی فەرمی ڕاهێنەری تایبەت لەگەڵ ٥ پێشنیارە خێراکە */
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                padding: '16px 10px',
-                userSelect: 'none'
-              }}>
-                <div style={{ textAlign: isRtl ? 'right' : 'left', marginBottom: '18px' }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '16px',
-                    background: 'var(--accent-gradient-subtle)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1.5px solid var(--accent-glow)',
-                    boxShadow: '0 0 25px var(--accent-glow)',
-                    marginBottom: '12px'
-                  }}>
-                    <span style={{ color: "var(--accent-primary)", display: "flex" }}><Sparkles size={26} /></span>
-                  </div>
-
-                  <h1 style={{
-                    fontSize: '24px',
-                    fontWeight: '900',
-                    background: 'linear-gradient(135deg, var(--accent-primary) 0%, #60A5FA 50%, var(--color-carbs) 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    margin: '0 0 6px 0',
-                    letterSpacing: '-0.3px'
-                  }}>
-                    {t('coachGreeting')} <Hand size={16} className="inline-block" />
-                  </h1>
-                  <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: 0, fontWeight: '600', lineHeight: '1.6' }}>
-                    {t('coachSubtitle')}
-                  </p>
-                </div>
-
-                {/* سەردێڕی پێشنیارە خێراکان */}
-                <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--accent-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span><Sparkles size={16} className="inline-block" /></span>
-                  <span>{t('quickPrompts')}:</span>
-                </div>
-
-                {/* ٥ کارتی پێشنیارکراوی زانستی بەپێی پلانەکە */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                  gap: '8px'
-                }}>
-                  {[
-                    {
-                      icon: <><Salad size={16} className="inline-block" /></>,
-                      title: currentLangConfig.code === 'en' ? 'Suggest a high-protein meal' : currentLangConfig.code === 'ar' ? 'اقترح وجبة غنية بالبروتين' : currentLangConfig.code === 'fa' ? 'پیشنهاد وعده غذایی پرپروتئین' : 'پێشنیاری ژەمێکی دەوڵەمەند بە پرۆتینم بۆ بکە',
-                      desc: currentLangConfig.code === 'en' ? 'Macro & calorie breakdown with quick add option' : currentLangConfig.code === 'ar' ? 'تفاصيل السعرات والماكروز مع زر الإضافة السريعة' : currentLangConfig.code === 'fa' ? 'تحلیل کالری و ماکرو با امکان افزودن سریع' : 'شیکاری ماکرۆ و کالۆری لەگەڵ کارتی زیادکردن بۆ ئەپ',
-                      prompt: currentLangConfig.code === 'en' ? 'Suggest a high-protein meal' : currentLangConfig.code === 'ar' ? 'اقترح وجبة غنية بالبروتين' : currentLangConfig.code === 'fa' ? 'یک وعده پرپروتئین پیشنهاد بده' : 'پێشنیاری ژەمێکی دەوڵەمەند بە پرۆتینم بۆ بکە'
-                    },
-                    {
-                      icon: <><Dumbbell size={16} className="inline-block" /></>,
-                      title: currentLangConfig.code === 'en' ? 'Adjust my workout to 5 days' : currentLangConfig.code === 'ar' ? 'عدّل تماريني إلى ٥ أيام أسبوعياً' : currentLangConfig.code === 'fa' ? 'برنامه تمرینی‌ام را به ۵ روز تنظیم کن' : 'کۆرسەکەم ڕێکبخە بۆ ٥ ڕۆژ لە هەفتەدا',
-                      desc: currentLangConfig.code === 'en' ? 'Upper / Lower / Push / Pull / Legs split' : currentLangConfig.code === 'ar' ? 'تقسيم Upper / Lower / Push / Pull / Legs' : currentLangConfig.code === 'fa' ? 'تقسیم‌بندی Upper / Lower / Push / Pull / Legs' : 'داڕشتنی دابەشکردنی Upper / Lower / Push / Pull / Legs',
-                      prompt: currentLangConfig.code === 'en' ? 'Adjust my workout to 5 days a week' : currentLangConfig.code === 'ar' ? 'عدل جدول تماريني إلى ٥ أيام في الأسبوع' : currentLangConfig.code === 'fa' ? 'برنامه تمرینی من را به ۵ روز در هفته تنظیم کن' : 'کۆرسەکەم بگۆڕە بۆ ٥ ڕۆژ لە هەفتەدا'
-                    },
-                    {
-                      icon: <><Target size={16} className="inline-block" color="var(--text-main)" /></>,
-                      title: currentLangConfig.code === 'en' ? 'Change goal to weight loss & fat burn' : currentLangConfig.code === 'ar' ? 'تغيير هدفي إلى إنقاص الوزن وحرق الدهون' : currentLangConfig.code === 'fa' ? 'تغییر هدف به کاهش وزن و چربی‌سوزی' : 'ئامانجم بگۆڕە بۆ دابەزاندنی کێش و سوتاندنی چەوری',
-                      desc: currentLangConfig.code === 'en' ? 'Set calorie deficit and target weight' : currentLangConfig.code === 'ar' ? 'ضبط عجز السعرات والوزن المستهدف' : currentLangConfig.code === 'fa' ? 'تنظیم کسری کالری و وزن هدف' : 'دانانی کورتهێنانی کالۆری و کێشی ئامانج',
-                      prompt: currentLangConfig.code === 'en' ? 'Change my goal to weight loss and fat burning' : currentLangConfig.code === 'ar' ? 'غير هدفي إلى إنقاص الوزن وحرق الدهون' : currentLangConfig.code === 'fa' ? 'هدف من را به کاهش وزن و چربی‌سوزی تغییر بده' : 'ئامانجم بگۆڕە بۆ دابەزاندنی کێش و سوتاندنی چەوری'
-                    },
-                    {
-                      icon: <><Bandage size={16} className="inline-block" /></>,
-                      title: currentLangConfig.code === 'en' ? 'I have back pain, how should I train?' : currentLangConfig.code === 'ar' ? 'عندي ألم في الظهر، كيف أتمرن؟' : currentLangConfig.code === 'fa' ? 'کمردرد دارم، چطور تمرین کنم؟' : 'ئازاری پشتم هەیە چۆن مەشق بکەم؟',
-                      desc: currentLangConfig.code === 'en' ? 'Health guidelines and safe substitutions' : currentLangConfig.code === 'ar' ? 'إرشادات صحية وبدائل التمارين الآمنة' : currentLangConfig.code === 'fa' ? 'راهنمایی سلامت و جایگزینی حرکات ایمن' : 'ڕێنمایی تەندروستی و گۆڕینی مەشقە مەترسیدارەکان',
-                      prompt: currentLangConfig.code === 'en' ? 'I have back pain, how should I adjust my workouts?' : currentLangConfig.code === 'ar' ? 'عندي ألم في الظهر، كيف أتمرن بأمان؟' : currentLangConfig.code === 'fa' ? 'کمردرد دارم، چطور تمریناتم را تنظیم کنم؟' : 'ئازاری پشتم هەیە چۆن مەشق بکەم؟'
-                    },
-                    {
-                      icon: <><Droplet size={16} className="inline-block" /></>,
-                      title: currentLangConfig.code === 'en' ? 'How much calories & water do I need?' : currentLangConfig.code === 'ar' ? 'كم أحتاج من السعرات والماء يومياً؟' : currentLangConfig.code === 'fa' ? 'روزانه به چقدر کالری و آب نیاز دارم؟' : 'پێویستم بە چەند کالۆری و ئاوە بەپێی کێشم؟',
-                      desc: currentLangConfig.code === 'en' ? 'Scientific calculation based on your profile' : currentLangConfig.code === 'ar' ? 'حساب دقيق لاحتياجات الماء والسعرات' : currentLangConfig.code === 'fa' ? 'محاسبه دقیق کالری و آب بر اساس مشخصات شما' : 'هەژمارکردنی وردی ئاو و کالۆری بەپێی کێش',
-                      prompt: currentLangConfig.code === 'en' ? 'How much calories and water do I need daily for my weight?' : currentLangConfig.code === 'ar' ? 'كم أحتاج من السعرات والماء يومياً وفقاً لوزني؟' : currentLangConfig.code === 'fa' ? 'بر اساس وزنم روزانه به چقدر آب و کالری نیاز دارم؟' : 'پێویستم بە چەند کالۆری و ئاوە بەپێی کێشم؟'
-                    }
-                  ].map((card, cIdx) => (
-                    <button
-                      key={cIdx}
-                      type="button"
-                      onClick={() => handleSendAiChatMessage(card.prompt)}
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: '14px',
-                        background: 'var(--card-subtle)',
-                        border: '1px solid var(--border-color)',
-                        textAlign: isRtl ? 'right' : 'left',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-glow)'; e.currentTarget.style.borderColor = 'var(--accent-glow)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--card-subtle)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '16px' }}>{card.icon}</span>
-                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-main)' }}>{card.title}</span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                        {card.desc}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              /* لێشاوی پەیامەکان */
-              chatMessages.map(msg => {
-                const isUser = msg.sender === 'user';
-                const isCopied = copiedMsgId === msg.id;
-                const isLiked = likedMsgs[msg.id];
-
-                if (isUser) {
-                  return (
-                    <div 
-                      key={msg.id}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: isRtl ? 'flex-start' : 'flex-end',
-                        width: '100%'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                        <span><User size={16} className="inline-block" /> {profile.name || (currentLangConfig.code === 'en' ? 'Athlete' : currentLangConfig.code === 'ar' ? 'بطل' : currentLangConfig.code === 'fa' ? 'قهرمان' : 'پاڵەوان')}</span>
-                        <span>•</span>
-                        <span>{msg.timestamp}</span>
-                      </div>
-
-                      <div style={{
-                        maxWidth: '85%',
-                        padding: '12px 16px',
-                        borderRadius: isRtl ? '18px 18px 18px 4px' : '18px 18px 4px 18px',
-                        background: 'var(--accent-gradient)',
-                        border: 'none',
-                        color: '#ffffff',
-                        fontSize: '14px',
-                        lineHeight: '1.6',
-                        boxShadow: '0 4px 15px var(--accent-glow)',
-                        wordBreak: 'break-word'
-                      }}>
-                        {msg.text}
-                      </div>
-                    </div>
-                  );
-                }
-
-                // پەیامی ڕاهێنەری تایبەت
-                return (
-                  <div 
-                    key={msg.id}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                      width: '100%',
-                      paddingBottom: '6px'
-                    }}
-                  >
-                    {/* سەردێڕی پەیامی ڕاهێنەر Coach */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '26px',
-                        height: '26px',
-                        borderRadius: '8px',
-                        background: 'var(--accent-gradient)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        <Sparkles size={15} color="#ffffff" />
-                      </div>
-                      <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
-                        {t('aiCoach')}
-                      </span>
-                      <span style={{ fontSize: '10px', color: 'var(--color-proteins)', background: 'rgba(56, 189, 248, 0.12)', padding: '2px 6px', borderRadius: '6px', fontWeight: '700' }}>
-                        {currentLangConfig.code === 'en' ? 'Smart Coach' : currentLangConfig.code === 'ar' ? 'المدرب الذكي' : currentLangConfig.code === 'fa' ? 'مربی هوشمند' : 'ڕاهێنەری زیرەک'} <Check size={16} className="inline-block" />
-                      </span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                        {msg.timestamp}
-                      </span>
-                    </div>
-
-                    <div style={{ paddingLeft: isRtl ? '0' : '34px', paddingRight: isRtl ? '34px' : '0' }}>
-                      
-                      {/* دەقی وەڵام بە فۆرماتی دەوڵەمەند */}
-                      <div style={{
-                        padding: '14px 16px',
-                        borderRadius: '16px',
-                        background: 'var(--card-subtle)',
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-main)',
-                        fontSize: '13.5px',
-                        lineHeight: '1.7',
-                        boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
-                      }}>
-                        {renderAntigravityFormattedText(msg.text)}
-                      </div>
-
-                      {/* کارتی کارلێککاری جێبەجێکردن لە بەرنامەدا (Interactive In-App Action Card) */}
-                      {msg.action && (
-                        <div className="dark-card" style={{
-                          marginTop: '10px',
-                          padding: '14px 16px',
-                          background: msg.action.isApplied 
-                            ? 'var(--accent-glow)' 
-                            : 'var(--accent-gradient-subtle)',
-                          border: msg.action.isApplied ? '1.5px solid var(--accent-glow)' : '1.5px solid var(--accent-glow)',
-                          borderRadius: '16px',
-                          boxShadow: '0 8px 25px rgba(0,0,0,0.25)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '18px' }}>
-                              {msg.action.type === 'SWITCH_COURSE' ? <><Dumbbell size={16} className="inline-block" /></> : msg.action.type === 'CHANGE_GOAL' ? <><Target size={16} className="inline-block" color="var(--text-main)" /></> : msg.action.type === 'ADD_MEAL' ? <><Utensils size={16} className="inline-block" /></> : (msg.action.type?.includes('WATER') || msg.action.title?.toString().includes('ئاو') || msg.action.title?.toString().toLowerCase().includes('water')) ? <><Droplet size={16} className="inline-block" color="#38bdf8" /></> : <><Bandage size={16} className="inline-block" /></>}
-                            </span>
-                            <div style={{ fontSize: '13.5px', fontWeight: '800', color: 'var(--text-main)' }}>
-                              {msg.action.title}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.4' }}>
-                            {msg.action.description}
-                          </div>
-
-                          {msg.action.isApplied ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--color-carbs)', fontSize: '12.5px', fontWeight: '800', padding: '8px', background: 'var(--card-subtle)', borderRadius: '12px' }}>
-                              <span><Check size={16} className="inline-block" /></span>
-                              <span>{t('appliedSuccess')}</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleExecuteAiAction(msg.action, msg)}
-                              style={{
-                                width: '100%',
-                                padding: '10px 14px',
-                                background: 'var(--accent-gradient)',
-                                color: '#ffffff',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: '12px',
-                                fontSize: '12.5px',
-                                fontWeight: '800',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                boxShadow: '0 6px 20px var(--accent-glow)'
-                              }}
-                            >
-                              <span><Zap size={16} className="inline-block" /></span>
-                              <span>{t('applyToApp')}</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {/* باڕی خوارەوەی پەیام (کۆپیکردن و کاردانەوە) */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (navigator.clipboard) {
-                              navigator.clipboard.writeText(msg.text);
-                              setCopiedMsgId(msg.id);
-                              setTimeout(() => setCopiedMsgId(null), 2000);
-                            }
-                          }}
-                          className="liquid-pill"
-                          style={{ padding: '3px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', color: isCopied ? 'var(--accent-primary)' : 'var(--text-muted)' }}
-                          title={currentLangConfig.code === 'en' ? 'Copy message' : currentLangConfig.code === 'ar' ? 'نسخ الرسالة' : currentLangConfig.code === 'fa' ? 'کپی پیام' : 'کۆپیکردن'}
-                        >
-                          <span>{isCopied ? <><Check size={16} className="inline-block" /></> : <><Clipboard size={16} className="inline-block" /></>}</span>
-                          <span>{isCopied ? (currentLangConfig.code === 'en' ? 'Copied' : currentLangConfig.code === 'ar' ? 'تم النسخ' : currentLangConfig.code === 'fa' ? 'کپی شد' : 'کۆپیکرا') : (currentLangConfig.code === 'en' ? 'Copy' : currentLangConfig.code === 'ar' ? 'نسخ' : currentLangConfig.code === 'fa' ? 'کپی' : 'کۆپیکردن')}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setLikedMsgs(prev => ({ ...prev, [msg.id]: prev[msg.id] === 'like' ? null : 'like' }))}
-                          className="liquid-pill"
-                          style={{ padding: '3px 8px', fontSize: '11px', cursor: 'pointer', color: isLiked === 'like' ? 'var(--accent-primary)' : 'var(--text-muted)' }}
-                          title={currentLangConfig.code === 'en' ? 'Helpful' : currentLangConfig.code === 'ar' ? 'مفيد' : currentLangConfig.code === 'fa' ? 'مفید بود' : 'سوپاس'}
-                        >
-                          <ThumbsUp size={16} className="inline-block" />
-                        </button>
-                      </div>
-
-                      {/* پێشنیارە خێراکانی پەیامی دواتر */}
-                      {msg.suggestedReplies && msg.suggestedReplies.length > 0 && (
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-                          {msg.suggestedReplies.map((replyText, rIdx) => (
-                            <button
-                              key={rIdx}
-                              type="button"
-                              onClick={() => handleSendAiChatMessage(replyText)}
-                              className="liquid-pill"
-                              style={{
-                                padding: '5px 12px',
-                                fontSize: '11.5px',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                color: 'var(--color-calories)',
-                                border: '1px solid var(--accent-glow)',
-                                background: 'var(--accent-glow)',
-                                transition: 'all 0.2s ease',
-                                textAlign: isRtl ? 'right' : 'left'
-                              }}
-                            >
-                              <span>{replyText}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            {/* ئەنیمەیشنی بیرکردنەوەی سیستەم */}
-            {isAiThinking && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', background: 'var(--card-subtle)', borderRadius: '16px', width: 'fit-content', border: '1px solid var(--border-color)' }}>
-                <Sparkles size={18} color="var(--accent-primary)" />
-                <span style={{ fontSize: '12.5px', color: 'var(--color-calories)', fontWeight: '700' }}>
-                  {t('aiThinking')}
-                </span>
-                <span style={{ display: 'inline-flex', gap: '4px' }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite' }}></span>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#4F46E5', animation: 'pulse 1s infinite 0.2s' }}></span>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite 0.4s' }}></span>
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* ٣. باڕی کەپسوولی ناردنی پرۆمپت */}
-          <form 
-            onSubmit={(e) => { e.preventDefault(); handleSendAiChatMessage(); }}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '6px'
-            }}
-          >
-            {/* کەپسوولی سەرەکی پرۆمپت */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 8px 6px 14px',
-              borderRadius: '50px',
-              background: theme === 'light' ? '#ffffff' : 'var(--card-bg)',
-              border: theme === 'light' ? '1.5px solid rgba(147, 51, 234, 0.35)' : '1.5px solid var(--accent-glow)',
-              boxShadow: theme === 'light' ? '0 8px 24px rgba(0,0,0,0.08)' : '0 8px 30px rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(20px)'
-            }}>
-              <button
-                type="submit"
-                disabled={!chatInput.trim() || isAiThinking}
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: chatInput.trim() 
-                    ? 'var(--accent-gradient)'
-                    : (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'var(--border-color)'),
-                  color: chatInput.trim() ? '#ffffff' : 'var(--text-muted)',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: chatInput.trim() ? 'pointer' : 'default',
-                  opacity: chatInput.trim() ? 1 : 0.6,
-                  boxShadow: chatInput.trim() ? '0 6px 20px var(--accent-glow)' : 'none',
-                  transition: 'all 0.25s ease'
-                }}
-              >
-                <SendIcon size={17} color={chatInput.trim() ? '#ffffff' : 'var(--text-muted)'} />
-              </button>
-
-              <input
-                type="text"
-                dir={isRtl ? 'rtl' : 'ltr'}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onFocus={() => setIsChatInputFocused(true)}
-                onBlur={() => setIsChatInputFocused(false)}
-                placeholder={t('askAiPlaceholder')}
-                style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: '50px',
-                  color: 'var(--text-main)',
-                  fontSize: '13.5px',
-                  outline: 'none'
-                }}
-              />
-
-              
-
-              
-            </div>
-          </form>
-            </div>
-          )}
-
-          {/* تابی نەخشەی سێ ڕەهەندی ماسولکەکان */}
-          {moreActiveTab === 'anatomy' && (
-            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => setMoreActiveTab('menu')}
-                  className="liquid-pill"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 16px',
-                    borderRadius: '14px',
-                    background: 'var(--card-subtle)',
-                    border: '1px solid var(--border-color)',
-                    color: 'var(--text-main)',
-                    fontSize: '13px',
-                    fontWeight: '800',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  {isRtl ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
-                  <span>{currentLangConfig.code === 'en' ? 'Back' : currentLangConfig.code === 'ar' ? 'رجوع' : currentLangConfig.code === 'fa' ? 'بازگشت' : 'گەڕانەوە'}</span>
-                </button>
-
-                {/* لە جیاتی ئەو نوسینە، دوو دوگمەی شیکی ماڵەوە و هۆڵ بۆ فلتەرکردنی وەرزشەکان */}
-                <div style={{
-                  display: 'inline-flex',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  padding: '4px',
-                  borderRadius: '16px',
-                  border: '1px solid var(--border-color)',
-                  gap: '4px'
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => setAtlasLocationFilter('home')}
-                    style={{
-                      padding: '7px 16px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      background: atlasLocationFilter === 'home' 
-                        ? 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)' 
-                        : 'transparent',
-                      color: atlasLocationFilter === 'home' ? '#ffffff' : 'var(--text-muted)',
-                      fontSize: '13px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.25s ease',
-                      boxShadow: atlasLocationFilter === 'home' ? '0 2px 12px rgba(6, 182, 212, 0.45)' : 'none'
-                    }}
-                  >
-                    <span>🏠</span>
-                    <span>{currentLangConfig.code === 'en' ? 'Home' : currentLangConfig.code === 'ar' ? 'المنزل' : currentLangConfig.code === 'fa' ? 'خانه' : 'ماڵەوە'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAtlasLocationFilter('gym')}
-                    style={{
-                      padding: '7px 16px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      background: atlasLocationFilter === 'gym' 
-                        ? 'var(--accent-gradient)' 
-                        : 'transparent',
-                      color: atlasLocationFilter === 'gym' ? '#ffffff' : 'var(--text-muted)',
-                      fontSize: '13px',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.25s ease',
-                      boxShadow: atlasLocationFilter === 'gym' ? '0 2px 12px var(--accent-glow)' : 'none'
-                    }}
-                  >
-                    <Dumbbell size={14} />
-                    <span>{currentLangConfig.code === 'en' ? 'Gym' : currentLangConfig.code === 'ar' ? 'الجيم' : currentLangConfig.code === 'fa' ? 'باشگاه' : 'هۆڵ'}</span>
-                  </button>
-                </div>
-              </div>
-
-              <MuscleAnatomy3D
-                onSelectExercise={(exName) => {
-                  setActiveTab('workout');
-                }}
-                currentLangConfig={currentLangConfig}
-                locationFilter={atlasLocationFilter}
-                onLocationChange={setAtlasLocationFilter}
-              />
-            </div>
-          )}
 
           {/* ==================== تابی تەواو و پێشکەوتووی ڕێکخستنەکان (Comprehensive System Settings) ==================== */}
           {moreActiveTab === 'settings' && (
@@ -8717,7 +9772,7 @@ Rules:
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
+                    onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', experienceLevel: profile.experienceLevel || 'intermediate', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
                     className="liquid-pill"
                     style={{ padding: '10px 8px', borderRadius: '14px', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer', textAlign: 'center', color: 'var(--text-main)', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color)' }}
                   >
@@ -8848,7 +9903,7 @@ Rules:
                   <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '10px' }}>
                     {currentLangConfig.code === 'en' ? 'Primary Accent Color:' : 'ڕەنگی بنەڕەتیی بەرنامە (Primary Accent):'}
                   </div>
-                  <div className="hide-scrollbar" style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '6px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', paddingBottom: '4px' }}>
                     {[
                       { id: 'system', name: currentLangConfig.code === 'en' ? 'Auto' : 'خۆکار', color1: '#94a3b8', color2: '#475569' },
                       { id: 'default', name: currentLangConfig.code === 'en' ? 'Royal Blue' : 'شینی شاهانە', color1: '#2563EB', color2: '#38BDF8' },
@@ -9252,6 +10307,11 @@ Rules:
                       </button>
                     ))}
                   </div>
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                    🛡️ {currentLangConfig.code === 'en'
+                      ? 'Scientific g/kg Protein and minimum healthy Fat (≥ 0.6 g/kg) floors remain protected across all presets.'
+                      : 'سنووری زانستی پڕۆتین (بەپێی کێش) و کەمترین چەوری تەندروست (لانیکەم ٠.٦ گرام/کگم) لە هەموو شێوازەکاندا پارێزراوە.'}
+                  </div>
                 </div>
               </div>
 
@@ -9433,19 +10493,19 @@ Rules:
               {/* بەشی ٨: دەربارەی بەرنامە و وەشان (About BQ GYM) */}
               <div className="dark-card" style={{ padding: '20px', borderRadius: '22px', textAlign: 'center' }}>
                 <div style={{
-                  width: '56px',
-                  height: '56px',
+                  width: '60px',
+                  height: '60px',
                   borderRadius: '18px',
-                  background: 'var(--accent-gradient)',
-                  color: '#ffffff',
-                  fontSize: '26px',
+                  background: '#000000',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto 12px auto',
-                  boxShadow: '0 8px 24px var(--accent-glow)'
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0, 164, 255, 0.28)'
                 }}>
-                  🏋️
+                  <BqGymLogo size={58} showBackground={false} />
                 </div>
                 <h3 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-main)', margin: '0 0 4px 0' }}>
                   BQ GYM (KurdFit Pro)
@@ -9578,7 +10638,7 @@ Rules:
                   zIndex: 5
                 }}
               >
-                <span>🏋️</span>
+                <BqGymLogo size={16} showBackground={false} />
                 <span>BQ GYM</span>
               </div>
 
@@ -9881,6 +10941,25 @@ Rules:
                   <span>{profile.availableDaysPerWeek || 4} {currentLangConfig.code === 'en' ? 'Days/W' : 'ڕۆژ/هەفتە'}</span>
                 </div>
 
+                {/* باجی ئاستی ئەزموون */}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '5px 12px',
+                    borderRadius: '9999px',
+                    background: 'rgba(147, 51, 234, 0.12)',
+                    border: '1px solid rgba(168, 85, 247, 0.28)',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    color: '#c084fc'
+                  }}
+                >
+                  <span>{profile.experienceLevel === 'beginner' ? '🌱' : profile.experienceLevel === 'advanced' ? '🔥' : '💪'}</span>
+                  <span>{getLocalizedExperience(profile.experienceLevel, language)}</span>
+                </div>
+
                 {/* نیشانەی ژمارەی فۆکەسەکان (+X) وەک +6 لە وێنەکەدا */}
                 {profile.bodyGoals?.enlarge?.length > 0 && (
                   <div
@@ -9970,6 +11049,7 @@ Rules:
                       targetDays: profile.targetDays,
                       goal: profile.goal,
                       goalPace: profile.goalPace || 'normal',
+                      experienceLevel: profile.experienceLevel || 'intermediate',
                       bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] }
                     });
                     setShowGoalModal(true);
@@ -10039,7 +11119,7 @@ Rules:
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button 
                   type="button"
-                  onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
+                  onClick={() => { setGoalFormData({ targetWeight: profile.targetWeight, targetDays: profile.targetDays, goal: profile.goal, goalPace: profile.goalPace || 'normal', experienceLevel: profile.experienceLevel || 'intermediate', bodyGoals: profile.bodyGoals || { enlarge: [], shrink: [] } }); setShowGoalModal(true); }}
                   style={{
                     width: '32px',
                     height: '32px',
@@ -10378,6 +11458,550 @@ Rules:
       )}
           </main>
 
+      {/* ==================== مۆداڵی چاتی ڕاهێنەری زیرەک (Single-Source Viewport Chat Modal - Zero Keyboard Gap) ==================== */}
+      {isCoachChatOpen && (
+        <div
+          id="ai-coach-chat-modal"
+          className={`ai-coach-modal ${(isKeyboardOpen || isChatInputFocused) ? 'is-keyboard-open' : ''}`}
+          style={{
+            ...(visualViewportStyle ? {
+              top: `${visualViewportStyle.top}px`,
+              height: `${visualViewportStyle.height}px`,
+              maxHeight: `${visualViewportStyle.height}px`
+            } : {}),
+            direction: currentLangConfig.dir
+          }}
+        >
+          {/* ١. سەردێڕی جێگیری سەرەوە */}
+          <header style={{ 
+            flexShrink: 0,
+            marginBottom: '10px',
+            padding: '12px 16px',
+            borderRadius: '20px',
+            background: 'var(--accent-gradient-subtle)',
+            border: '1px solid var(--accent-glow)',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(20px)',
+            zIndex: 30
+          }}>
+            <div className="flex-between" style={{ alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChatInputFocused(false);
+                    setMoreActiveTab('menu');
+                  }}
+                  className="liquid-pill"
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0
+                  }}
+                  title={currentLangConfig.code === 'en' ? 'Back' : currentLangConfig.code === 'ar' ? 'رجوع' : currentLangConfig.code === 'fa' ? 'بازگشت' : 'گەڕانەوە'}
+                >
+                  {isRtl ? <ArrowRight size={18} /> : <ArrowLeft size={18} />}
+                </button>
+
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '12px',
+                  background: 'var(--accent-gradient)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 15px var(--accent-glow)',
+                  flexShrink: 0
+                }}>
+                  <Sparkles size={20} color="#ffffff" />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <h2 style={{ fontSize: '16px', fontWeight: '900', color: 'var(--text-main)', margin: 0 }}>
+                      {t('aiCoach')}
+                    </h2>
+                  </div>
+                </div>
+              </div>
+
+              {/* دوگمەی چاتی نوێ */}
+              <button
+                type="button"
+                onClick={() => setChatMessages([])}
+                className="liquid-pill"
+                style={{ 
+                  padding: '6px 12px', 
+                  fontSize: '11.5px', 
+                  fontWeight: '800', 
+                  cursor: 'pointer', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px', 
+                  color: 'var(--text-main)', 
+                  background: 'var(--card-subtle)', 
+                  border: '1px solid var(--border-color)' 
+                }}
+                title={currentLangConfig.code === 'en' ? 'Start New Chat' : currentLangConfig.code === 'ar' ? 'بدء محادثة جديدة' : currentLangConfig.code === 'fa' ? 'شروع گفتگوی جدید' : 'دەستپێکردنەوەی چات'}
+              >
+                <span><RefreshCw size={16} className="inline-block" /></span>
+                <span>{currentLangConfig.code === 'en' ? 'New Chat' : currentLangConfig.code === 'ar' ? 'محادثة جديدة' : currentLangConfig.code === 'fa' ? 'گفتگوی جدید' : 'چاتی نوێ'}</span>
+              </button>
+            </div>
+          </header>
+
+          {/* ٢. ناوەڕۆکی چاتی ڕاهێنەری تایبەت */}
+          <div 
+            ref={chatScrollRef}
+            className="ai-coach-messages"
+            style={{ 
+              paddingRight: isRtl ? '0' : '4px',
+              paddingLeft: isRtl ? '4px' : '0'
+            }}
+          >
+            {chatMessages.length === 0 ? (
+              /* شاشەی بەخێرهاتنی فەرمی ڕاهێنەری تایبەت لەگەڵ ٥ پێشنیارە خێراکە */
+              <div style={{
+                margin: 'auto 0',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '12px 6px',
+                userSelect: 'none'
+              }}>
+                <div style={{ textAlign: isRtl ? 'right' : 'left', marginBottom: '18px' }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '16px',
+                    background: 'var(--accent-gradient-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1.5px solid var(--accent-glow)',
+                    boxShadow: '0 0 25px var(--accent-glow)',
+                    marginBottom: '12px'
+                  }}>
+                    <span style={{ color: "var(--accent-primary)", display: "flex" }}><Sparkles size={26} /></span>
+                  </div>
+
+                  <h1 style={{
+                    fontSize: '24px',
+                    fontWeight: '900',
+                    background: 'linear-gradient(135deg, var(--accent-primary) 0%, #60A5FA 50%, var(--color-carbs) 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    margin: '0 0 6px 0',
+                    letterSpacing: '-0.3px'
+                  }}>
+                    {t('coachGreeting')} <Hand size={16} className="inline-block" />
+                  </h1>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: 0, fontWeight: '600', lineHeight: '1.6' }}>
+                    {t('coachSubtitle')}
+                  </p>
+                </div>
+
+                {/* سەردێڕی پێشنیارە خێراکان */}
+                <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--accent-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span><Sparkles size={16} className="inline-block" /></span>
+                  <span>{t('quickPrompts')}:</span>
+                </div>
+
+                {/* ٥ کارتی پێشنیارکراوی زانستی بەپێی پلانەکە */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: '8px'
+                }}>
+                  {[
+                    {
+                      icon: <><Salad size={16} className="inline-block" /></>,
+                      title: currentLangConfig.code === 'en' ? 'Suggest a high-protein meal' : currentLangConfig.code === 'ar' ? 'اقترح وجبة غنية بالبروتين' : currentLangConfig.code === 'fa' ? 'پیشنهاد وعده غذایی پرپروتئین' : 'پێشنیاری ژەمێکی دەوڵەمەند بە پرۆتینم بۆ بکە',
+                      desc: currentLangConfig.code === 'en' ? 'Macro & calorie breakdown with quick add option' : currentLangConfig.code === 'ar' ? 'تفاصيل السعرات والماكروز مع زر الإضافة السريعة' : currentLangConfig.code === 'fa' ? 'تحلیل کالری و ماکرو با امکان افزودن سریع' : 'شیکاری ماکرۆ و کالۆری لەگەڵ کارتی زیادکردن بۆ ئەپ',
+                      prompt: currentLangConfig.code === 'en' ? 'Suggest a high-protein meal' : currentLangConfig.code === 'ar' ? 'اقترح وجبة غنية بالبروتين' : currentLangConfig.code === 'fa' ? 'یک وعده پرپروتئین پیشنهاد بده' : 'پێشنیاری ژەمێکی دەوڵەمەند بە پرۆتینم بۆ بکە'
+                    },
+                    {
+                      icon: <><Dumbbell size={16} className="inline-block" /></>,
+                      title: currentLangConfig.code === 'en' ? 'Adjust my workout to 5 days' : currentLangConfig.code === 'ar' ? 'عدّل تماريني إلى ٥ أيام أسبوعياً' : currentLangConfig.code === 'fa' ? 'برنامه تمرینی‌ام را به ۵ روز تنظیم کن' : 'کۆرسەکەم ڕێکبخە بۆ ٥ ڕۆژ لە هەفتەدا',
+                      desc: currentLangConfig.code === 'en' ? 'Upper / Lower / Push / Pull / Legs split' : currentLangConfig.code === 'ar' ? 'تقسيم Upper / Lower / Push / Pull / Legs' : currentLangConfig.code === 'fa' ? 'تقسیم‌بندی Upper / Lower / Push / Pull / Legs' : 'داڕشتنی دابەشکردنی Upper / Lower / Push / Pull / Legs',
+                      prompt: currentLangConfig.code === 'en' ? 'Adjust my workout to 5 days a week' : currentLangConfig.code === 'ar' ? 'عدل جدول تماريني إلى ٥ أيام في الأسبوع' : currentLangConfig.code === 'fa' ? 'برنامه تمرینی من را به ۵ روز در هفته تنظیم کن' : 'کۆرسەکەم بگۆڕە بۆ ٥ ڕۆژ لە هەفتەدا'
+                    },
+                    {
+                      icon: <><Target size={16} className="inline-block" color="var(--text-main)" /></>,
+                      title: currentLangConfig.code === 'en' ? 'Change goal to weight loss & fat burn' : currentLangConfig.code === 'ar' ? 'تغيير هدفي إلى إنقاص الوزن وحرق الدهون' : currentLangConfig.code === 'fa' ? 'تغییر هدف به کاهش وزن و چربی‌سوزی' : 'ئامانجم بگۆڕە بۆ دابەزاندنی کێش و سوتاندنی چەوری',
+                      desc: currentLangConfig.code === 'en' ? 'Set calorie deficit and target weight' : currentLangConfig.code === 'ar' ? 'ضبط عجز السعرات والوزن المستهدف' : currentLangConfig.code === 'fa' ? 'تنظیم کسری کالری و وزن هدف' : 'دانانی کورتهێنانی کالۆری و کێشی ئامانج',
+                      prompt: currentLangConfig.code === 'en' ? 'Change my goal to weight loss and fat burning' : currentLangConfig.code === 'ar' ? 'غير هدفي إلى إنقاص الوزن وحرق الدهون' : currentLangConfig.code === 'fa' ? 'هدف من را به کاهش وزن و چربی‌سوزی تغییر بده' : 'ئامانجم بگۆڕە بۆ دابەزاندنی کێش و سوتاندنی چەوری'
+                    },
+                    {
+                      icon: <><Bandage size={16} className="inline-block" /></>,
+                      title: currentLangConfig.code === 'en' ? 'I have back pain, how should I train?' : currentLangConfig.code === 'ar' ? 'عندي ألم في الظهر، كيف أتمرن؟' : currentLangConfig.code === 'fa' ? 'کمردرد دارم، چطور تمرین کنم؟' : 'ئازاری پشتم هەیە چۆن مەشق بکەم؟',
+                      desc: currentLangConfig.code === 'en' ? 'Health guidelines and safe substitutions' : currentLangConfig.code === 'ar' ? 'إرشادات صحية وبدائل التمارين الآمنة' : currentLangConfig.code === 'fa' ? 'راهنمایی سلامت و جایگزینی حرکات ایمن' : 'ڕێنمایی تەندروستی و گۆڕینی مەشقە مەترسیدارەکان',
+                      prompt: currentLangConfig.code === 'en' ? 'I have back pain, how should I adjust my workouts?' : currentLangConfig.code === 'ar' ? 'عندي ألم في الظهر، كيف أتمرن بأمان؟' : currentLangConfig.code === 'fa' ? 'کمردرد دارم، چطور تمریناتم را تنظیم کنم؟' : 'ئازاری پشتم هەیە چۆن مەشق بکەم؟'
+                    },
+                    {
+                      icon: <><Droplet size={16} className="inline-block" /></>,
+                      title: currentLangConfig.code === 'en' ? 'How much calories & water do I need?' : currentLangConfig.code === 'ar' ? 'كم أحتاج من السعرات والماء يومياً؟' : currentLangConfig.code === 'fa' ? 'روزانه به چقدر کالری و آب نیاز دارم؟' : 'پێویستم بە چەند کالۆری و ئاوە بەپێی کێشم؟',
+                      desc: currentLangConfig.code === 'en' ? 'Scientific calculation based on your profile' : currentLangConfig.code === 'ar' ? 'حساب دقيق لاحتياجات الماء والسعرات' : currentLangConfig.code === 'fa' ? 'محاسبه دقیق کالری و آب بر اساس مشخصات شما' : 'هەژمارکردنی وردی ئاو و کالۆری بەپێی کێش',
+                      prompt: currentLangConfig.code === 'en' ? 'How much calories and water do I need daily for my weight?' : currentLangConfig.code === 'ar' ? 'كم أحتاج من السعرات والماء يومياً وفقاً لوزني؟' : currentLangConfig.code === 'fa' ? 'بر اساس وزنم روزانه به چقدر آب و کالری نیاز دارم؟' : 'پێویستم بە چەند کالۆری و ئاوە بەپێی کێشم؟'
+                    }
+                  ].map((card, cIdx) => (
+                    <button
+                      key={cIdx}
+                      type="button"
+                      onClick={() => handleSendAiChatMessage(card.prompt)}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '14px',
+                        background: 'var(--card-subtle)',
+                        border: '1px solid var(--border-color)',
+                        textAlign: isRtl ? 'right' : 'left',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-glow)'; e.currentTarget.style.borderColor = 'var(--accent-glow)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--card-subtle)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '16px' }}>{card.icon}</span>
+                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-main)' }}>{card.title}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                        {card.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* لێشاوی پەیامەکان */
+              chatMessages.map(msg => {
+                const isUser = msg.sender === 'user';
+                const isCopied = copiedMsgId === msg.id;
+                const isLiked = likedMsgs[msg.id];
+
+                if (isUser) {
+                  return (
+                    <div 
+                      key={msg.id}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: isRtl ? 'flex-start' : 'flex-end',
+                        width: '100%'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                        <span><User size={16} className="inline-block" /> {profile.name || (currentLangConfig.code === 'en' ? 'Athlete' : currentLangConfig.code === 'ar' ? 'بطل' : currentLangConfig.code === 'fa' ? 'قهرمان' : 'پاڵەوان')}</span>
+                        <span>•</span>
+                        <span>{msg.timestamp}</span>
+                      </div>
+
+                      <div style={{
+                        maxWidth: '85%',
+                        padding: '12px 16px',
+                        borderRadius: isRtl ? '18px 18px 18px 4px' : '18px 18px 4px 18px',
+                        background: 'var(--accent-gradient)',
+                        border: 'none',
+                        color: '#ffffff',
+                        fontSize: '14px',
+                        lineHeight: '1.6',
+                        boxShadow: '0 4px 15px var(--accent-glow)',
+                        wordBreak: 'break-word'
+                      }}>
+                        {msg.text}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // پەیامی ڕاهێنەری تایبەت
+                return (
+                  <div 
+                    key={msg.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      width: '100%',
+                      paddingBottom: '6px'
+                    }}
+                  >
+                    {/* سەردێڕی پەیامی ڕاهێنەر Coach */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '26px',
+                        height: '26px',
+                        borderRadius: '8px',
+                        background: 'var(--accent-gradient)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <Sparkles size={15} color="#ffffff" />
+                      </div>
+                      <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
+                        {t('aiCoach')}
+                      </span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-proteins)', background: 'rgba(56, 189, 248, 0.12)', padding: '2px 6px', borderRadius: '6px', fontWeight: '700' }}>
+                        {currentLangConfig.code === 'en' ? 'Smart Coach' : currentLangConfig.code === 'ar' ? 'المدرب الذكي' : currentLangConfig.code === 'fa' ? 'مربی هوشمند' : 'ڕاهێنەری زیرەک'} <Check size={16} className="inline-block" />
+                      </span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        {msg.timestamp}
+                      </span>
+                    </div>
+
+                    <div style={{ paddingLeft: isRtl ? '0' : '34px', paddingRight: isRtl ? '34px' : '0' }}>
+                      {/* دەقی وەڵام بە فۆرماتی دەوڵەمەند */}
+                      <div style={{
+                        padding: '14px 16px',
+                        borderRadius: '16px',
+                        background: 'var(--card-subtle)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-main)',
+                        fontSize: '13.5px',
+                        lineHeight: '1.7',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
+                      }}>
+                        {renderAntigravityFormattedText(msg.text)}
+                      </div>
+
+                      {/* کارتی کارلێککاری جێبەجێکردن لە بەرنامەدا (Interactive In-App Action Card) */}
+                      {msg.action && (
+                        <div className="dark-card" style={{
+                          marginTop: '10px',
+                          padding: '14px 16px',
+                          background: msg.action.isApplied 
+                            ? 'var(--accent-glow)' 
+                            : 'var(--accent-gradient-subtle)',
+                          border: '1.5px solid var(--accent-glow)',
+                          borderRadius: '16px',
+                          boxShadow: '0 8px 25px rgba(0,0,0,0.25)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '18px' }}>
+                              {msg.action.type === 'SWITCH_COURSE' ? <><Dumbbell size={16} className="inline-block" /></> : msg.action.type === 'CHANGE_GOAL' ? <><Target size={16} className="inline-block" color="var(--text-main)" /></> : msg.action.type === 'ADD_MEAL' ? <><Utensils size={16} className="inline-block" /></> : (msg.action.type?.includes('WATER') || msg.action.title?.toString().includes('ئاو') || msg.action.title?.toString().toLowerCase().includes('water')) ? <><Droplet size={16} className="inline-block" color="#38bdf8" /></> : <><Bandage size={16} className="inline-block" /></>}
+                            </span>
+                            <div style={{ fontSize: '13.5px', fontWeight: '800', color: 'var(--text-main)' }}>
+                              {msg.action.title}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.4' }}>
+                            {msg.action.description}
+                          </div>
+
+                          {msg.action.isApplied ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--color-carbs)', fontSize: '12.5px', fontWeight: '800', padding: '8px', background: 'var(--card-subtle)', borderRadius: '12px' }}>
+                              <span><Check size={16} className="inline-block" /></span>
+                              <span>{t('appliedSuccess')}</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleExecuteAiAction(msg.action, msg)}
+                              style={{
+                                width: '100%',
+                                padding: '10px 14px',
+                                background: 'var(--accent-gradient)',
+                                color: '#ffffff',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '12px',
+                                fontSize: '12.5px',
+                                fontWeight: '800',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                boxShadow: '0 6px 20px var(--accent-glow)'
+                              }}
+                            >
+                              <span><Zap size={16} className="inline-block" /></span>
+                              <span>{t('applyToApp')}</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* باڕی خوارەوەی پەیام (کۆپیکردن و کاردانەوە) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(msg.text);
+                              setCopiedMsgId(msg.id);
+                              setTimeout(() => setCopiedMsgId(null), 2000);
+                            }
+                          }}
+                          className="liquid-pill"
+                          style={{ padding: '3px 10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', color: isCopied ? 'var(--accent-primary)' : 'var(--text-muted)' }}
+                          title={currentLangConfig.code === 'en' ? 'Copy message' : currentLangConfig.code === 'ar' ? 'نسخ الرسالة' : currentLangConfig.code === 'fa' ? 'کپی پیام' : 'کۆپیکردن'}
+                        >
+                          <span>{isCopied ? <><Check size={16} className="inline-block" /></> : <><Clipboard size={16} className="inline-block" /></>}</span>
+                          <span>{isCopied ? (currentLangConfig.code === 'en' ? 'Copied' : currentLangConfig.code === 'ar' ? 'تم النسخ' : currentLangConfig.code === 'fa' ? 'کپی شد' : 'کۆپیکرا') : (currentLangConfig.code === 'en' ? 'Copy' : currentLangConfig.code === 'ar' ? 'نسخ' : currentLangConfig.code === 'fa' ? 'کپی' : 'کۆپیکردن')}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setLikedMsgs(prev => ({ ...prev, [msg.id]: prev[msg.id] === 'like' ? null : 'like' }))}
+                          className="liquid-pill"
+                          style={{ padding: '3px 8px', fontSize: '11px', cursor: 'pointer', color: isLiked === 'like' ? 'var(--accent-primary)' : 'var(--text-muted)' }}
+                          title={currentLangConfig.code === 'en' ? 'Helpful' : currentLangConfig.code === 'ar' ? 'مفيد' : currentLangConfig.code === 'fa' ? 'مفید بود' : 'سوپاس'}
+                        >
+                          <ThumbsUp size={16} className="inline-block" />
+                        </button>
+                      </div>
+
+                      {/* پێشنیارە خێراکانی پەیامی دواتر */}
+                      {msg.suggestedReplies && msg.suggestedReplies.length > 0 && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                          {msg.suggestedReplies.map((replyText, rIdx) => (
+                            <button
+                              key={rIdx}
+                              type="button"
+                              onClick={() => handleSendAiChatMessage(replyText)}
+                              className="liquid-pill"
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '11.5px',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                color: 'var(--color-calories)',
+                                border: '1px solid var(--accent-glow)',
+                                background: 'var(--accent-glow)',
+                                transition: 'all 0.2s ease',
+                                textAlign: isRtl ? 'right' : 'left'
+                              }}
+                            >
+                              <span>{replyText}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {/* ئەنیمەیشنی بیرکردنەوەی سیستەم */}
+            {isAiThinking && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', background: 'var(--card-subtle)', borderRadius: '16px', width: 'fit-content', border: '1px solid var(--border-color)' }}>
+                <Sparkles size={18} color="var(--accent-primary)" />
+                <span style={{ fontSize: '12.5px', color: 'var(--color-calories)', fontWeight: '700' }}>
+                  {t('aiThinking')}
+                </span>
+                <span style={{ display: 'inline-flex', gap: '4px' }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite' }}></span>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#4F46E5', animation: 'pulse 1s infinite 0.2s' }}></span>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite 0.4s' }}></span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* ٣. باڕی کەپسوولی ناردنی پرۆمپت (Flush لەسەر کیبۆرد بێ بۆشایی زیادە) */}
+          <form 
+            className="ai-coach-input-form"
+            onSubmit={(e) => { e.preventDefault(); handleSendAiChatMessage(); }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 8px 6px 14px',
+              borderRadius: '50px',
+              background: theme === 'light' ? '#ffffff' : 'var(--card-bg)',
+              border: theme === 'light' ? '1.5px solid rgba(147, 51, 234, 0.35)' : '1.5px solid var(--accent-glow)',
+              boxShadow: theme === 'light' ? '0 8px 24px rgba(0,0,0,0.08)' : '0 8px 30px rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(20px)'
+            }}>
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || isAiThinking}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: chatInput.trim() 
+                    ? 'var(--accent-gradient)'
+                    : (theme === 'light' ? 'rgba(0,0,0,0.06)' : 'var(--border-color)'),
+                  color: chatInput.trim() ? '#ffffff' : 'var(--text-muted)',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: chatInput.trim() ? 'pointer' : 'default',
+                  opacity: chatInput.trim() ? 1 : 0.6,
+                  boxShadow: chatInput.trim() ? '0 6px 20px var(--accent-glow)' : 'none',
+                  transition: 'all 0.25s ease',
+                  flexShrink: 0
+                }}
+              >
+                <SendIcon size={17} color={chatInput.trim() ? '#ffffff' : 'var(--text-muted)'} />
+              </button>
+
+              <input
+                type="text"
+                dir={isRtl ? 'rtl' : 'ltr'}
+                enterKeyHint="send"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onFocus={() => {
+                  setIsChatInputFocused(true);
+                  const onFocusSync = () => {
+                    if (typeof window !== 'undefined' && window.scrollY > 0) {
+                      try { window.scrollTo(0, 0); } catch {}
+                    }
+                    syncViewportRef.current?.();
+                    scrollCoachToBottom(true);
+                  };
+                  setTimeout(onFocusSync, 80);
+                  setTimeout(onFocusSync, 320);
+                }}
+                onBlur={() => {
+                  setIsChatInputFocused(false);
+                  const onBlurSync = () => {
+                    if (typeof window !== 'undefined' && window.scrollY > 0) {
+                      try { window.scrollTo(0, 0); } catch {}
+                    }
+                    syncViewportRef.current?.();
+                  };
+                  setTimeout(onBlurSync, 60);
+                  setTimeout(onBlurSync, 300);
+                }}
+                placeholder={t('askAiPlaceholder')}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  padding: '8px 10px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '50px',
+                  color: 'var(--text-main)',
+                  fontSize: '16px',
+                  lineHeight: '1.35',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* ==================== مۆداڵی زیرەکی دەستکرد بۆ دۆزینەوەی خواردن (AI Food Finder Modal - Bottom Sheet) ==================== */}
       {showAiFoodModal && (
         <div 
@@ -10541,19 +12165,58 @@ Rules:
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '320px', overflowY: 'auto' }}>
-              {notifications.map(item => (
-                <div key={item.id} className="liquid-pill" style={{ padding: '14px', border: item.unread ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)', background: item.unread ? 'var(--accent-glow)' : 'var(--card-subtle)' }}>
-                  <div className="flex-between" style={{ marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', fontSize: '14px' }}>
-                      <span>{item.icon}</span>
-                      <span>{item.title}</span>
-                    </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{item.time}</span>
-                  </div>
-                  <div className="text-subtle" style={{ fontSize: '12.5px', marginTop: '4px', lineHeight: '1.4' }}>{item.desc}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '340px', overflowY: 'auto' }}>
+              {notifications.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {language === 'en' ? 'All caught up! No new notifications.' : 'هیچ ئاگادارکردنەوەیەکی نوێ نییە.'}
                 </div>
-              ))}
+              ) : (
+                notifications.map(item => {
+                  const notifIcon =
+                    item.iconName === 'battery' ? <BatteryCharging size={16} color="#38bdf8" /> :
+                    item.iconName === 'refresh' ? <RefreshCw size={16} color="#10b981" /> :
+                    item.iconName === 'alert' ? <AlertTriangle size={16} color="#f59e0b" /> :
+                    item.iconName === 'droplet' ? <Droplet size={16} color="#38bdf8" /> :
+                    item.iconName === 'target' ? <Target size={16} color="var(--text-main)" /> :
+                    <Dumbbell size={16} />;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setReadNotificationIds(prev => {
+                          if (prev.includes(item.id)) return prev;
+                          const next = [...prev, item.id];
+                          safeStorage.setItem('app_read_notification_ids', next);
+                          return next;
+                        });
+                        if (item.actionType === 'OPEN_WORKOUT') {
+                          setActiveTab('workout');
+                          setShowNotificationsModal(false);
+                        } else if (item.actionType === 'OPEN_HOME') {
+                          setActiveTab('home');
+                          setShowNotificationsModal(false);
+                        }
+                      }}
+                      className="liquid-pill"
+                      style={{
+                        padding: '14px',
+                        cursor: 'pointer',
+                        border: item.unread ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                        background: item.unread ? 'var(--accent-glow)' : 'var(--card-subtle)'
+                      }}
+                    >
+                      <div className="flex-between" style={{ marginBottom: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center' }}>{notifIcon}</span>
+                          <span>{item.title}</span>
+                        </div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{item.time}</span>
+                      </div>
+                      <div className="text-subtle" style={{ fontSize: '12.5px', marginTop: '4px', lineHeight: '1.4' }}>{item.desc}</div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -10564,6 +12227,234 @@ Rules:
                 {t('close')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== مۆداڵی ئەرشیفی کۆرسە کۆنەکان (Course History Archive Modal) ==================== */}
+      {showCourseHistory && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            padding: 0,
+            backgroundColor: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(8px)'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCourseHistory(false);
+              setHistoryDeleteConfirmIdx(null);
+            }
+          }}
+        >
+          <div
+            className="modal-content bottom-sheet-content"
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              maxHeight: '88vh',
+              overflowY: 'auto',
+              padding: '20px 18px 28px 18px',
+              borderRadius: '28px 28px 0 0',
+              borderTop: '1px solid var(--border-color)',
+              direction: currentLangConfig.dir,
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.5)'
+            }}
+          >
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.25)', borderRadius: '2px', margin: '0 auto 16px auto', flexShrink: 0 }} />
+
+            <div className="flex-between" style={{ marginBottom: '16px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <History size={20} color="var(--accent-primary)" />
+                <h2 style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>
+                  {language === 'en' ? 'Course History Archive' : 'ئەرشیفی کۆرسە کۆنەکان'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCourseHistory(false);
+                  setHistoryDeleteConfirmIdx(null);
+                }}
+                className="liquid-pill"
+                style={{ width: '34px', height: '34px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '1px solid var(--border-color)', color: 'var(--text-main)', background: 'var(--card-subtle)' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {courseHistory.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 14px', color: 'var(--text-muted)', fontSize: '13.5px', lineHeight: '1.6' }}>
+                {language === 'en'
+                  ? 'No archived courses yet. When you generate or switch to a new workout program, your previous course is automatically saved here.'
+                  : 'هێشتا هیچ کۆرسێکی کۆن ئەرشیف نەکراوە. هەر کاتێک کۆرسێکی نوێ دروست بکەیت، کۆرسە کۆنەکەت بە شێوەی خۆکار لێرە پاشەکەوت دەبێت.'}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                {courseHistory.map((archivedCourse, idx) => {
+                  const isPreviewOpen = expandedHistoryCourseIdx === idx;
+                  const isConfirmingDelete = historyDeleteConfirmIdx === idx;
+                  const startStr = archivedCourse.startDate ? new Date(archivedCourse.startDate).toLocaleDateString() : '-';
+                  const archivedStr = archivedCourse.archivedAt ? new Date(archivedCourse.archivedAt).toLocaleDateString() : '-';
+
+                  return (
+                    <div
+                      key={`${archivedCourse.id || idx}_${archivedCourse.archivedAt || idx}`}
+                      className="liquid-card"
+                      style={{
+                        padding: '14px',
+                        borderRadius: '18px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--card-subtle)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      <div className="flex-between" style={{ alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '14.5px', fontWeight: '900', color: 'var(--text-main)', lineHeight: '1.35' }}>
+                            {archivedCourse.title}
+                          </div>
+                          {archivedCourse.splitName && archivedCourse.splitName !== archivedCourse.title && (
+                            <div style={{ fontSize: '11.5px', color: 'var(--color-carbs)', fontWeight: '700', marginTop: '2px' }}>
+                              {archivedCourse.splitName}
+                            </div>
+                          )}
+                        </div>
+                        <span className="liquid-pill" style={{ padding: '4px 9px', fontSize: '11px', fontWeight: '800', color: 'var(--accent-primary)', flexShrink: 0 }}>
+                          {archivedCourse.daysPerWeek || 4} {language === 'en' ? 'days/wk' : 'ڕۆژ/هەفتە'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: '700' }}>
+                        <span>📅 {language === 'en' ? `Started: ${startStr}` : `دەستپێک: ${startStr}`}</span>
+                        <span>📦 {language === 'en' ? `Archived: ${archivedStr}` : `ئەرشیف: ${archivedStr}`}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setExpandedHistoryCourseIdx(isPreviewOpen ? null : idx)}
+                        className="liquid-pill"
+                        style={{
+                          padding: '7px 10px',
+                          fontSize: '11.5px',
+                          fontWeight: '800',
+                          color: 'var(--color-proteins)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          cursor: 'pointer',
+                          background: 'var(--card-inner)',
+                          border: '1px solid var(--border-color)'
+                        }}
+                      >
+                        <span>{language === 'en' ? 'Preview Days & Exercises' : 'بینینی ڕۆژەکان و ڕاهێنانەکان'}</span>
+                        {isPreviewOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
+
+                      {isPreviewOpen && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', borderRadius: '12px', background: 'var(--card-inner)', border: '1px solid var(--border-color)', maxHeight: '220px', overflowY: 'auto' }}>
+                          {(archivedCourse.weeklyPlan || []).map((day, dIdx) => (
+                            <div key={dIdx} style={{ fontSize: '11.5px', lineHeight: '1.45', borderBottom: dIdx < 6 ? '1px solid var(--border-color)' : 'none', paddingBottom: dIdx < 6 ? '6px' : 0 }}>
+                              <div style={{ fontWeight: '800', color: day.isRestDay ? 'var(--text-muted)' : 'var(--text-main)' }}>
+                                {day.dayName}: {day.focus}
+                              </div>
+                              {!day.isRestDay && Array.isArray(day.exercises) && day.exercises.length > 0 && (
+                                <div style={{ color: 'var(--text-subtle)', marginTop: '2px', fontSize: '11px' }}>
+                                  {day.exercises.map(ex => `${ex.englishName || ex.name} (${ex.sets}×${ex.reps})`).join(' • ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {isConfirmingDelete ? (
+                        <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.4)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: '800', color: '#f87171', textAlign: 'center' }}>
+                            {language === 'en' ? 'Permanently delete this archived course?' : 'دڵنیایت دەتەوێت ئەم کۆرسە بە یەکجاری بسڕیتەوە؟'}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteHistoryCourse(archivedCourse, idx)}
+                              style={{ flex: 1, padding: '8px', borderRadius: '10px', border: 'none', background: '#ef4444', color: '#ffffff', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
+                            >
+                              {language === 'en' ? 'Yes, Delete' : 'بەڵێ، بسڕەوە'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHistoryDeleteConfirmIdx(null)}
+                              className="liquid-pill"
+                              style={{ flex: 1, padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
+                            >
+                              {language === 'en' ? 'Cancel' : 'پاشگەزبوونەوە'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleReactivateHistoryCourse(archivedCourse, idx)}
+                            style={{
+                              flex: 2,
+                              padding: '10px 12px',
+                              borderRadius: '12px',
+                              border: 'none',
+                              background: 'var(--accent-gradient)',
+                              color: '#ffffff',
+                              fontSize: '12.5px',
+                              fontWeight: '900',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <RotateCcw size={14} />
+                            <span>{language === 'en' ? 'Reactivate' : 'چالاککردنەوە'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryDeleteConfirmIdx(idx)}
+                            style={{
+                              flex: 1,
+                              padding: '10px 12px',
+                              borderRadius: '12px',
+                              border: '1px solid rgba(239, 68, 68, 0.45)',
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              color: '#ef4444',
+                              fontSize: '12.5px',
+                              fontWeight: '800',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '5px'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            <span>{language === 'en' ? 'Delete' : 'سڕینەوە'}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -10714,6 +12605,10 @@ Rules:
                   />
                 </div>
               )}
+
+              <div style={{ marginTop: '12px' }}>
+                {renderExperienceSelector(goalFormData.experienceLevel || profile.experienceLevel || 'intermediate', (lvl) => setGoalFormData(prev => ({ ...prev, experienceLevel: lvl })))}
+              </div>
             </div>
 
             {/* ٢. بەشی ئامانجی یاریزان و کێش (Athlete Goal & Presets) */}
@@ -11025,7 +12920,7 @@ Rules:
                     <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)' }}>
                       {currentLangConfig.code === 'en' ? 'Target Daily Calories:' : currentLangConfig.code === 'ar' ? 'السعرات المستهدفة حسب الهدف:' : currentLangConfig.code === 'fa' ? 'کالری مورد نیاز بر اساس هدف:' : 'کالۆری پێویست بەپێی ئامانج:'}
                     </span>
-                    <span style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)' }}>{previewCalc.goalCalories} <span style={{ fontSize: '11px', color: 'var(--color-carbs)' }}>{t('kcal')}</span></span>
+                    <span style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)' }}>{displayEnergy(previewCalc.goalCalories)} <span style={{ fontSize: '11px', color: 'var(--color-carbs)' }}>{energyUnitLabel}</span></span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-main)', borderTop: '1px solid var(--border-color)', paddingTop: '5px' }}>
                     <span><Beef size={14} className="inline-block" /> {t('protein')}: <b style={{ color: 'var(--color-proteins)' }}>{previewCalc.goalProtein}g</b></span>
@@ -11034,7 +12929,7 @@ Rules:
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '5px', marginTop: '5px' }}>
                     <span>⏳ {language === 'en' ? 'Estimated Duration:' : 'ماوەی پێشبینیکراو:'} <b style={{ color: 'var(--text-main)' }}>{previewCalc.targetDays} {language === 'en' ? 'Days' : 'ڕۆژ'}</b></span>
-                    <span>⏱️ {language === 'en' ? 'Rest:' : 'پشوو:'} <b style={{ color: 'var(--color-carbs)' }}>{(goalFormData.goalPace || 'normal') === 'slow' ? '90s' : (goalFormData.goalPace || 'normal') === 'fast' ? '45s' : (goalFormData.goalPace || 'normal') === 'very_fast' ? '35s' : '60s'}</b></span>
+                    <span>⏱️ {language === 'en' ? 'Rest:' : 'پشوو:'} <b style={{ color: 'var(--color-carbs)' }}>150–180s / 60–120s</b></span>
                   </div>
                 </div>
               );
@@ -11630,6 +13525,21 @@ Rules:
                 <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700' }}>{t('age')}:</label>
                 <input type="number" value={editFormData.age} onChange={e => setEditFormData({ ...editFormData, age: Number(e.target.value) })} style={{ width: '100%', padding: '12px', borderRadius: '12px', marginTop: '4px' }} />
               </div>
+
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '700' }}>
+                  🚫 {currentLangConfig.code === 'en' ? 'Food Allergies / Dislikes:' : 'حەساسیەت یان خۆراکی نەخوازراو:'}
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.allergiesOrDislikes || ''}
+                  onChange={e => setEditFormData({ ...editFormData, allergiesOrDislikes: e.target.value })}
+                  placeholder={currentLangConfig.code === 'en' ? 'e.g. fish, dairy, eggs, nuts' : 'نموونە: ماسی، شیر، هێلکە، بادەم'}
+                  style={{ width: '100%', padding: '12px', borderRadius: '12px', marginTop: '4px' }}
+                />
+              </div>
+
+              {renderExperienceSelector(editFormData.experienceLevel || profile.experienceLevel || 'intermediate', (lvl) => setEditFormData({ ...editFormData, experienceLevel: lvl }))}
             </div>
 
             
@@ -12037,7 +13947,7 @@ Rules:
                 <div className="dark-card" style={{ padding: '12px 14px', marginBottom: '18px', background: 'var(--accent-glow)', border: '1px solid var(--accent-glow)' }}>
                   <div className="flex-between" style={{ marginBottom: '6px' }}>
                     <span style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-muted)' }}>{t('targetCalories')}:</span>
-                    <span style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>{previewCalc.goalCalories} <span style={{ fontSize: '11px', color: 'var(--color-carbs)' }}>{t('kcal')}</span></span>
+                    <span style={{ fontSize: '17px', fontWeight: '900', color: 'var(--text-main)' }}>{displayEnergy(previewCalc.goalCalories)} <span style={{ fontSize: '11px', color: 'var(--color-carbs)' }}>{energyUnitLabel}</span></span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-main)', borderTop: '1px solid var(--border-color)', paddingTop: '6px' }}>
                     <span><Beef size={16} className="inline-block" /> {t('protein')}: <b style={{ color: 'var(--color-proteins)' }}>{previewCalc.goalProtein}g</b></span>
@@ -12046,7 +13956,7 @@ Rules:
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '6px', marginTop: '6px' }}>
                     <span>⏳ {language === 'en' ? 'Estimated Duration:' : 'ماوەی پێشبینیکراو:'} <b style={{ color: 'var(--text-main)' }}>{previewCalc.targetDays} {language === 'en' ? 'Days' : 'ڕۆژ'}</b></span>
-                    <span>⏱️ {language === 'en' ? 'Rest Interval:' : 'کاتی پشوو:'} <b style={{ color: 'var(--color-carbs)' }}>{(goalFormData.goalPace || 'normal') === 'slow' ? '90s' : (goalFormData.goalPace || 'normal') === 'fast' ? '45s' : (goalFormData.goalPace || 'normal') === 'very_fast' ? '35s' : '60s'}</b></span>
+                    <span>⏱️ {language === 'en' ? 'Rest Interval:' : 'کاتی پشوو:'} <b style={{ color: 'var(--color-carbs)' }}>150–180s / 60–120s</b></span>
                   </div>
                 </div>
               );
@@ -12394,6 +14304,45 @@ Rules:
                         </div>
                       );
                     })}
+
+                    {/* مێژووی ئەرشیفکراوی ٣٠ ڕۆژی ڕابردوو (Daily Reset Archived History) */}
+                    {Array.isArray(nutritionHistory) && nutritionHistory.length > 0 && (
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.14)' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>📅 {currentLangConfig.code === 'en' ? 'Archived Daily Log (Last 30 Days)' : 'تۆماری ڕۆژانەی ٣٠ ڕۆژی ڕابردوو'}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: '800' }}>{nutritionHistory.length}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {nutritionHistory.slice(0, 30).map((entry, hIdx) => (
+                            <div
+                              key={entry.date || hIdx}
+                              style={{
+                                padding: '10px 12px',
+                                borderRadius: '14px',
+                                background: 'var(--card-subtle)',
+                                border: '1px solid var(--border-color)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}
+                            >
+                              <div className="flex-between" style={{ alignItems: 'center' }}>
+                                <span dir="ltr" style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)' }}>{entry.date}</span>
+                                <span style={{ fontSize: '12.5px', fontWeight: '900', color: 'var(--accent-primary)' }}>
+                                  {displayEnergy(entry.calories || 0)} / {displayEnergy(entry.targetCalories || targetCals)} {energyUnitLabel}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', fontSize: '10.5px', fontWeight: '700', color: 'var(--text-muted)' }}>
+                                <span>🥩 P: {entry.protein || 0}g</span>
+                                <span>🍚 C: {entry.carbs || 0}g</span>
+                                <span>🥑 F: {entry.fat || 0}g</span>
+                                <span style={{ color: '#38bdf8' }}>💧 {entry.waterMl || 0} ml</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -12614,43 +14563,415 @@ Rules:
               language={language}
               currentLangConfig={currentLangConfig}
               onFoodScanned={(scannedFood) => {
-                const parseNum = (v, fallback = 0) => {
-                  if (typeof v === 'number' && !isNaN(v)) return v;
-                  if (typeof v === 'string') {
-                    const match = v.match(/[0-9.]+/);
-                    if (match) {
-                      const n = parseFloat(match[0]);
-                      if (!isNaN(n)) return n;
-                    }
-                  }
-                  return fallback;
-                };
-
-                const cal = parseNum(scannedFood.baseCalories ?? scannedFood.calories, 200);
-                const prot = parseNum(scannedFood.baseProtein ?? scannedFood.proteinNum ?? scannedFood.protein, 10);
-                const carbs = parseNum(scannedFood.baseCarbs ?? scannedFood.carbsNum ?? scannedFood.carbs, 20);
-                const fat = parseNum(scannedFood.baseFat ?? scannedFood.fatNum ?? scannedFood.fat, 5);
-                const estWeight = parseNum(scannedFood.weight ?? scannedFood.estimatedWeight ?? scannedFood.portionWeight, 150);
-                const estUnit = scannedFood.unit || (scannedFood.isLiquid ? 'مل' : 'گرام');
-
-                const newFoodItem = {
-                  id: 'scan_' + Date.now(),
-                  name: scannedFood.name || 'خواردنی سکانکراو',
-                  englishName: scannedFood.englishName || scannedFood.name || 'Scanned Food',
-                  icon: scannedFood.icon || '🍽️',
-                  baseCalories: Math.round((cal / (estWeight || 100)) * 100),
-                  baseProtein: Math.round((prot / (estWeight || 100)) * 100),
-                  baseCarbs: Math.round((carbs / (estWeight || 100)) * 100),
-                  baseFat: Math.round((fat / (estWeight || 100)) * 100),
-                  standardWeight: estWeight,
-                  isLiquid: scannedFood.isLiquid || false,
-                  category: 'all',
-                  isAiGenerated: true
-                };
+                const normalizedScan = normalizeFoodScanResult(scannedFood);
                 setShowScanModal(false);
-                openPortionSelector(newFoodItem, estUnit, estWeight);
+                if (!normalizedScan || !normalizedScan.isFood || !Array.isArray(normalizedScan.items) || normalizedScan.items.length === 0) {
+                  alert(currentLangConfig.code === 'en' ? 'No clear food detected in this photo. Please try again.' : 'هیچ خۆراکێکی ڕوون لەم وێنەیەدا نەدۆزرایەوە، تکایە دووبارە هەوڵبدەرەوە.');
+                  return;
+                }
+                setScannedMealTarget(selectedMealType || 'lunch');
+                setScannedFoodReviewModal(normalizedScan);
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* مۆداڵی پێداچوونەوە و پشتڕاستکردنەوەی خواردنی سکانکراو (Single & Multi-Item AI Scan Review Sheet) */}
+      {scannedFoodReviewModal && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            padding: 0,
+            backgroundColor: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(8px)'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setScannedFoodReviewModal(null);
+          }}
+        >
+          <div
+            className="modal-content bottom-sheet-content"
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '88vh',
+              overflowY: 'auto',
+              padding: '20px 20px 28px 20px',
+              borderRadius: '28px 28px 0 0',
+              borderTop: '1px solid var(--border-color)',
+              direction: currentLangConfig.dir,
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.55)'
+            }}
+          >
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.25)', borderRadius: '2px', margin: '0 auto 14px auto' }} />
+
+            <div className="flex-between" style={{ marginBottom: '14px', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '17px', fontWeight: '900', margin: 0, color: 'var(--text-main)' }}>
+                  📷 {scannedFoodReviewModal.mealName || (currentLangConfig.code === 'en' ? 'Scanned Meal Review' : 'شیکاری خواردنی سکانکراو')}
+                </h2>
+                {scannedFoodReviewModal.portionLabel && (
+                  <div style={{ fontSize: '12px', color: 'var(--accent-primary)', fontWeight: '700', marginTop: '3px' }}>
+                    {scannedFoodReviewModal.portionLabel}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setScannedFoodReviewModal(null)}
+                className="liquid-pill"
+                style={{ width: '34px', height: '34px', borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* هەڵبژاردنی ژەم */}
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                {currentLangConfig.code === 'en' ? 'Add to meal:' : 'زیادکردن بۆ ژەمی:'}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                {[
+                  { id: 'breakfast', label: t('breakfast') },
+                  { id: 'lunch', label: t('lunch') },
+                  { id: 'snack', label: t('snack') },
+                  { id: 'dinner', label: t('dinner') }
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setScannedMealTarget(m.id)}
+                    className="liquid-pill"
+                    style={{
+                      padding: '8px 6px',
+                      borderRadius: '11px',
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      border: scannedMealTarget === m.id ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: scannedMealTarget === m.id ? 'var(--accent-gradient-subtle)' : 'var(--card-subtle)',
+                      color: scannedMealTarget === m.id ? 'var(--accent-primary)' : 'var(--text-main)'
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* کۆی گشتی ژەمەکە */}
+            <div style={{ padding: '12px 14px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(168, 85, 247, 0.1))', border: '1px solid var(--border-color)', marginBottom: '14px' }}>
+              <div className="flex-between" style={{ marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)' }}>
+                  {currentLangConfig.code === 'en' ? 'Estimated Meal Total:' : 'کۆی گشتی ژەمەکە:'} ({scannedFoodReviewModal.totalWeightGrams}g)
+                </span>
+                <span style={{ fontSize: '16px', fontWeight: '900', color: 'var(--accent-primary)' }}>
+                  {displayEnergy(scannedFoodReviewModal.totalCalories)} {energyUnitLabel}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '11.5px', fontWeight: '800' }}>
+                <span style={{ color: 'var(--color-proteins)' }}>🥩 P: {scannedFoodReviewModal.totalProtein}g</span>
+                <span style={{ color: 'var(--color-carbs)' }}>🍚 C: {scannedFoodReviewModal.totalCarbs}g</span>
+                <span style={{ color: 'var(--color-fats, #F59E0B)' }}>🥑 F: {scannedFoodReviewModal.totalFat}g</span>
+              </div>
+            </div>
+
+            {/* لیستی خواردنەکانی ناو قاپەکە (بە گرام یان مل قابلی دەستکاریکردن) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              {(scannedFoodReviewModal.items || []).map(item => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '16px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)'
+                  }}
+                >
+                  <div className="flex-between" style={{ alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: 'var(--text-main)' }}>
+                        {item.icon || '🍽️'} {getLocalizedFoodName(item, language)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {item.portionLabel} • 100{item.isLiquid ? 'ml' : 'g'} = {displayEnergy(item.baseCaloriesPer100g)} {energyUnitLabel}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: '900', color: 'var(--accent-primary)' }}>
+                      {displayEnergy(item.totalCalories)} {energyUnitLabel}
+                    </div>
+                  </div>
+
+                  <div className="flex-between" style={{ alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)' }}>
+                        {item.isLiquid ? 'ml:' : (currentLangConfig.code === 'en' ? 'Grams:' : 'گرام:')}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.estimatedWeightGrams}
+                        onChange={(e) => handleUpdateScannedItemGrams(item.id, e.target.value)}
+                        style={{
+                          width: '78px',
+                          padding: '6px 8px',
+                          borderRadius: '10px',
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          background: 'var(--bg-color)',
+                          border: '1px solid var(--border-color)',
+                          color: 'var(--text-main)'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>
+                      <span>P:{item.totalProtein}g</span>
+                      <span>C:{item.totalCarbs}g</span>
+                      <span>F:{item.totalFat}g</span>
+                      {scannedFoodReviewModal.isMultiItem && (
+                        <button
+                          type="button"
+                          onClick={() => handleLogScannedItems([item], false)}
+                          className="liquid-pill"
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: '800',
+                            background: 'var(--accent-gradient-subtle)',
+                            border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + {currentLangConfig.code === 'en' ? 'Add' : 'زیادکردن'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => handleLogScannedItems(scannedFoodReviewModal.items || [], true)}
+                style={{
+                  flex: 1,
+                  padding: '13px 16px',
+                  background: 'var(--accent-gradient)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '16px',
+                  fontSize: '14px',
+                  fontWeight: '900',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 16px var(--accent-glow)'
+                }}
+              >
+                ✅ {scannedFoodReviewModal.isMultiItem
+                  ? (currentLangConfig.code === 'en' ? 'Add Full Meal' : 'زیادکردنی هەموو ژەمەکە')
+                  : (currentLangConfig.code === 'en' ? 'Add Food' : 'زیادکردنی خواردن')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScannedFoodReviewModal(null)}
+                className="liquid-pill"
+                style={{ padding: '13px 18px', borderRadius: '16px', fontWeight: '800', cursor: 'pointer' }}
+              >
+                {t('close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* مۆداڵی گۆڕینی یەک ژەم بە AI یان بەدیلی کوردی هاوسەنگ (Single-Meal Kurdish Swap Sheet) */}
+      {swapMealModalData && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            padding: 0,
+            backgroundColor: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(8px)'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSwapMealModalData(null);
+              setAiSwappedMealCandidate(null);
+            }
+          }}
+        >
+          <div
+            className="modal-content bottom-sheet-content"
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '86vh',
+              overflowY: 'auto',
+              padding: '20px 20px 28px 20px',
+              borderRadius: '28px 28px 0 0',
+              borderTop: '1px solid var(--border-color)',
+              direction: currentLangConfig.dir,
+              boxShadow: '0 -10px 40px rgba(0,0,0,0.55)'
+            }}
+          >
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.25)', borderRadius: '2px', margin: '0 auto 14px auto' }} />
+
+            <div className="flex-between" style={{ marginBottom: '12px', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '17px', fontWeight: '900', margin: 0, color: 'var(--text-main)' }}>
+                  🔄 {currentLangConfig.code === 'en' ? 'Swap Meal' : 'گۆڕینی ژەم'} • {t(swapMealModalData.mealType)}
+                </h2>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {currentLangConfig.code === 'en' ? 'Target:' : 'ئامانجی ئەم ژەمە:'} ~{displayEnergy(swapMealModalData.targetCalories)} {energyUnitLabel} • ~{swapMealModalData.targetProtein}g {t('protein')}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSwapMealModalData(null); setAiSwappedMealCandidate(null); }}
+                className="liquid-pill"
+                style={{ width: '34px', height: '34px', borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAiSwapSingleMeal}
+              disabled={isAiSwappingMeal}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '14px',
+                background: 'var(--accent-gradient)',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: '900',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginBottom: '14px',
+                boxShadow: '0 4px 14px var(--accent-glow)'
+              }}
+            >
+              <Sparkles size={16} />
+              <span>
+                {isAiSwappingMeal
+                  ? (currentLangConfig.code === 'en' ? 'Generating Kurdish Alternative...' : 'خەریکی دروستکردنی بەدیلی نوێیە...')
+                  : (currentLangConfig.code === 'en' ? 'Generate Smart AI Alternative' : 'پێشنیاری زیرەک بە خواردنی کوردی (AI)')}
+              </span>
+            </button>
+
+            {aiSwappedMealCandidate && (
+              <div style={{ padding: '12px 14px', borderRadius: '16px', background: 'rgba(16, 185, 129, 0.1)', border: '1.5px solid rgba(16, 185, 129, 0.4)', marginBottom: '14px' }}>
+                <div className="flex-between" style={{ marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '900', color: '#10B981' }}>✨ {aiSwappedMealCandidate.label}</span>
+                  <span style={{ fontSize: '12.5px', fontWeight: '900', color: 'var(--text-main)' }}>{displayEnergy(aiSwappedMealCandidate.totalCalories)} {energyUnitLabel}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
+                  {aiSwappedMealCandidate.items.map((it, idx) => (
+                    <div key={idx} style={{ fontSize: '12px', color: 'var(--text-main)' }}>
+                      • {getLocalizedFoodName(it, language)} ({it.quantity} {getLocalizedUnit(it.unit, language)}) — P:{it.protein}g
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleApplySwappedMeal(aiSwappedMealCandidate)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '12px', background: '#10B981', color: '#ffffff', border: 'none', fontWeight: '900', fontSize: '12.5px', cursor: 'pointer' }}
+                >
+                  ✅ {currentLangConfig.code === 'en' ? 'Use This AI Meal' : 'بەکارهێنانی ئەم ژەمە'}
+                </button>
+              </div>
+            )}
+
+            <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '8px' }}>
+              🏠 {currentLangConfig.code === 'en' ? 'Calorie-Matched Kurdish Home Alternatives:' : 'بەدیلی ئامادە و هاوسەنگ لە خواردنی ماڵەوەی کوردی:'}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {findSingleMealReplacementCandidates({
+                mealType: swapMealModalData.mealType,
+                targetCalories: swapMealModalData.targetCalories,
+                targetProtein: swapMealModalData.targetProtein,
+                currentItems: swapMealModalData.currentItems,
+                foodCatalog: normalizedMasterFoodList,
+                allergiesOrDislikes: profile?.allergiesOrDislikes || ''
+              }).map(cand => (
+                <div
+                  key={cand.id}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '16px',
+                    background: 'var(--card-subtle)',
+                    border: '1px solid var(--border-color)'
+                  }}
+                >
+                  <div className="flex-between" style={{ marginBottom: '6px', gap: '8px' }}>
+                    <div style={{ fontSize: '13.5px', fontWeight: '900', color: 'var(--text-main)' }}>{cand.label}</div>
+                    <span style={{ fontSize: '12.5px', fontWeight: '900', color: 'var(--accent-primary)', whiteSpace: 'nowrap' }}>
+                      {displayEnergy(cand.totalCalories)} {energyUnitLabel}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '8px' }}>
+                    {cand.items.map((it, idx) => (
+                      <div key={idx} style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                        • {getLocalizedFoodName(it, language)} ({it.quantity} {getLocalizedUnit(it.unit, language)})
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex-between" style={{ alignItems: 'center' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>
+                      🥩 P: {cand.totalProtein}g • 🍚 C: {cand.totalCarbs}g • 🥑 F: {cand.totalFat}g
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplySwappedMeal(cand)}
+                      className="liquid-pill"
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '11px',
+                        background: 'var(--accent-gradient-subtle)',
+                        border: '1px solid var(--accent-primary)',
+                        color: 'var(--accent-primary)',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {currentLangConfig.code === 'en' ? 'Select' : 'هەڵبژاردن'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -12742,7 +15063,9 @@ Rules:
               marginBottom: '18px'
             }}>
               <ExerciseThumbnail
-                exerciseName={activeFormExercise.englishName || activeFormExercise.nameEn || getExerciseEnglishName(activeFormExercise)}
+                exerciseId={activeFormExercise.exerciseId || ''}
+                exerciseName={getExerciseEnglishName(activeFormExercise)}
+                muscle={activeFormExercise.muscle || activeFormExercise.target || ''}
                 size={180}
               />
             </div>
@@ -13614,7 +15937,7 @@ Rules:
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <ExerciseThumbnail exerciseName={candidate.englishName || candidate.name} size={42} />
+                      <ExerciseThumbnail exerciseId={candidate.exerciseId || ''} exerciseName={getExerciseEnglishName(candidate)} muscle={candidate.muscle || candidate.target || ''} size={42} />
                       <div style={{ textAlign: 'left' }}>
                         <div style={{ fontWeight: '800', fontSize: '14.5px', color: 'var(--text-main)' }}>
                           {candidate.englishName || candidate.name}
@@ -14089,7 +16412,18 @@ Rules:
       <AdminDashboardModal
         isOpen={showAdminModal}
         onClose={() => setShowAdminModal(false)}
+        appTheme={theme}
       />
+
+      {/* ==================== مۆداڵی نەخشەی بازرگانی و هاوبەشەکان (Commercial Partner Map) ==================== */}
+      {showCommercialMapModal && (
+        <CommercialPartnerMap
+          onClose={() => setShowCommercialMapModal(false)}
+          appTheme={theme}
+          language={language}
+          currentLangConfig={currentLangConfig}
+        />
+      )}
 
       {/* ==================== هێڵی خوارەوە (Luminous Purple-Blue Liquid Glass Bottom Bar) ==================== */}
       <nav 
@@ -14113,7 +16447,7 @@ Rules:
           paddingRight: '6px',
           overflow: 'visible',
           direction: 'ltr',
-          display: ((isKeyboardOpen || isChatInputFocused) && (activeTab === 'more' || activeTab === 'ai') && moreActiveTab === 'coach') ? 'none' : 'flex'
+          display: isCoachChatOpen ? 'none' : 'flex'
         }}
       >
         {/* پاشبنەمای قەوس و بڕاوەی شوشەیی */}

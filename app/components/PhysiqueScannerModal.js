@@ -7,6 +7,7 @@ import {
   RotateCcw, Info, UserCheck, EyeOff, Layers
 } from 'lucide-react';
 import { playCaptureSuccessSound, playPoseAlignedSound, playSparkleSound } from '../utils/audioFX';
+import { calculateScientificGoalByAi } from '../utils/scientificEngine';
 
 export default function PhysiqueScannerModal({
   isOpen,
@@ -202,12 +203,31 @@ export default function PhysiqueScannerModal({
     }
   };
 
-  // ئەنجامدانی شیکاری AI لە ڕێگەی Gemini Vision
+  // ئەنجامدانی شیکاری AI لە ڕێگەی Gemini Vision لەگەڵ فۆڵباکی زانستی ISSN/Helms لە کاتی هەڵە یان ئۆفلایندا
+  const buildScientificPhysiqueFallback = () => {
+    const fallbackBf = profile.gender === 'female' ? 22 : 16;
+    const calc = calculateScientificGoalByAi({
+      ...profile,
+      bodyFatPercentage: fallbackBf
+    });
+    return {
+      bodyFatPercentage: fallbackBf,
+      bodyType: 'مێزۆمۆرف (وەرزشی)',
+      muscleMassLevel: 'مامناوەند لەگەڵ توانای گەشەی بەرز',
+      laggingMuscles: ['سینگی سەرەوە (Incline Chest)', 'شانی لاوەکی (Lateral Delts)', 'پشتی فراوان (Lats Width)'],
+      strongMuscles: ['قاچەکان', 'پێشەوەی باڵ'],
+      postureFeedback: 'هاوسەنگی جەستە زۆر باشە، پێویستە سەرنج بخرێتە سەر سنگی سەرەوە و پشت بۆ پڕبوونی تەواو.',
+      recommendedCalories: calc.goalCalories,
+      recommendedProtein: calc.goalProtein,
+      workoutFocusText: 'چڕکردنەوەی ڕاهێنانەکانی سنگی سەرەوە و بەشی لاوەکی شان لە سەرەتای ڕۆژەکاندا.'
+    };
+  };
+
   const runAiPhysiqueAnalysis = async (imagesObj) => {
     setCurrentStep('analyzing');
     setIsAnalyzing(true);
     try {
-      if (typeof window !== 'undefined' && window.analyzePhysiqueDirectly) {
+      if (typeof window !== 'undefined' && window.analyzePhysiqueDirectly && navigator.onLine !== false) {
         const result = await window.analyzePhysiqueDirectly(
           imagesObj.front,
           imagesObj.side,
@@ -215,31 +235,21 @@ export default function PhysiqueScannerModal({
           profile,
           language
         );
-        setAnalysisResult(result);
-        setCurrentStep('results');
-        playSparkleSound();
-      } else {
-        // فۆڵباک ئەگەر نێتۆرک نەبوو یان ڕاستەوخۆ
-        setTimeout(() => {
-          const fallback = {
-            bodyFatPercentage: profile.gender === 'female' ? 22 : 16,
-            bodyType: 'مێزۆمۆرف (وەرزشی)',
-            muscleMassLevel: 'مامناوەند لەگەڵ توانای گەشەی بەرز',
-            laggingMuscles: ['سینگی سەرەوە (Incline Chest)', 'شانی لاوەکی (Lateral Delts)', 'پشتی فراوان (Lats Width)'],
-            strongMuscles: ['قاچەکان', 'پێشەوەی باڵ'],
-            postureFeedback: 'هاوسەنگی جەستە زۆر باشە، پێویستە سەرنج بخرێتە سەر سنگی سەرەوە بۆ پڕبوونی تەواو.',
-            recommendedCalories: Math.round((Number(profile.weight) || 75) * 32),
-            recommendedProtein: Math.round((Number(profile.weight) || 75) * 2.1),
-            workoutFocusText: 'چڕکردنەوەی ڕاهێنانەکانی سنگی سەرەوە و بەشی لاوەکی شان لە سەرەتای ڕۆژەکاندا.'
-          };
-          setAnalysisResult(fallback);
+        if (result && typeof result === 'object') {
+          setAnalysisResult(result);
           setCurrentStep('results');
           playSparkleSound();
-        }, 2500);
+          return;
+        }
       }
-    } catch (err) {
-      console.error("AI Physique Analysis failed:", err);
+      setAnalysisResult(buildScientificPhysiqueFallback());
       setCurrentStep('results');
+      playSparkleSound();
+    } catch (err) {
+      console.warn("AI Physique Analysis fallback triggered:", err);
+      setAnalysisResult(buildScientificPhysiqueFallback());
+      setCurrentStep('results');
+      playSparkleSound();
     } finally {
       setIsAnalyzing(false);
     }

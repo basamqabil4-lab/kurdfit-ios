@@ -1,7 +1,7 @@
 import { db, storage } from '../../lib/firebase';
 import { 
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, 
-  getDocs, onSnapshot, query, orderBy 
+  getDocs, onSnapshot 
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
@@ -280,5 +280,173 @@ export async function deleteAdminAccount(adminId) {
     const filtered = list.filter(a => a.id !== adminId);
     localStorage.setItem('bq_admins_list', JSON.stringify(filtered));
   } catch {}
+  return true;
+}
+
+// =========================================================================
+// نەخشەی بازرگانی هاوبەشەکان (Commercial B2B Partner Locations Sync)
+// =========================================================================
+
+export const COMMERCIAL_LOCATIONS_STORAGE_KEY = 'app_commercial_locations';
+const COMMERCIAL_LOCATIONS_EVENT = 'bq_commercial_locations_updated';
+
+export function normalizeCommercialLocation(raw = {}) {
+  const validCategories = ['gym', 'restaurant', 'supplement'];
+  const catRaw = String(raw.category || 'gym').toLowerCase().trim();
+  const category = validCategories.includes(catRaw) ? catRaw : 'gym';
+  const parsedLat = Number(raw.lat);
+  const parsedLng = Number(raw.lng);
+  const lat = Number.isFinite(parsedLat) ? Math.round(parsedLat * 1000000) / 1000000 : 36.1911;
+  const lng = Number.isFinite(parsedLng) ? Math.round(parsedLng * 1000000) / 1000000 : 44.0092;
+
+  return {
+    id: String(raw.id || `loc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+    name: String(raw.name || '').trim(),
+    category,
+    city: String(raw.city || '').trim(),
+    address: String(raw.address || '').trim(),
+    workingHours: String(raw.workingHours || '').trim(),
+    lat,
+    lng,
+    phoneOrWhatsapp: String(raw.phoneOrWhatsapp || '').trim(),
+    discountCode: String(raw.discountCode || '').trim(),
+    discountText: String(raw.discountText || '').trim(),
+    isFeaturedVip: Boolean(raw.isFeaturedVip),
+    createdAt: raw.createdAt || new Date().toISOString()
+  };
+}
+
+export function sortCommercialLocations(list = []) {
+  return [...(Array.isArray(list) ? list : [])]
+    .filter(item => item && item.name)
+    .map(normalizeCommercialLocation)
+    .sort((a, b) => {
+      if (a.isFeaturedVip !== b.isFeaturedVip) return a.isFeaturedVip ? -1 : 1;
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    });
+}
+
+export function readLocalCommercialLocations() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(COMMERCIAL_LOCATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sortCommercialLocations(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeLocalCommercialLocations(list = []) {
+  if (typeof window === 'undefined') return [];
+  const sorted = sortCommercialLocations(list);
+  try {
+    localStorage.setItem(COMMERCIAL_LOCATIONS_STORAGE_KEY, JSON.stringify(sorted));
+    window.dispatchEvent(new Event(COMMERCIAL_LOCATIONS_EVENT));
+  } catch {}
+  return sorted;
+}
+
+export async function fetchCommercialLocations() {
+  try {
+    const snap = await getDocs(collection(db, 'commercialLocations'));
+    const list = [];
+    snap.forEach((d) => {
+      list.push(normalizeCommercialLocation({ id: d.id, ...d.data() }));
+    });
+    const sorted = sortCommercialLocations(list);
+    if (sorted.length > 0) {
+      writeLocalCommercialLocations(sorted);
+      return sorted;
+    }
+    const localFallback = readLocalCommercialLocations();
+    return localFallback;
+  } catch (e) {
+    console.warn('fetchCommercialLocations fallback to local cache:', e?.message || e);
+    return readLocalCommercialLocations();
+  }
+}
+
+export function subscribeToCommercialLocations(onLocationsChange) {
+  if (typeof onLocationsChange !== 'function') return () => {};
+  const initialLocal = readLocalCommercialLocations();
+  if (initialLocal.length > 0) {
+    onLocationsChange(initialLocal);
+  }
+
+  let unsubFirestore = () => {};
+  try {
+    unsubFirestore = onSnapshot(
+      collection(db, 'commercialLocations'),
+      (snap) => {
+        const list = [];
+        snap.forEach((d) => {
+          list.push(normalizeCommercialLocation({ id: d.id, ...d.data() }));
+        });
+        const sorted = sortCommercialLocations(list);
+        if (sorted.length > 0 || readLocalCommercialLocations().length === 0) {
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(COMMERCIAL_LOCATIONS_STORAGE_KEY, JSON.stringify(sorted));
+            }
+          } catch {}
+          onLocationsChange(sorted);
+        }
+      },
+      (err) => {
+        console.warn('Realtime commercialLocations warning:', err?.message || err);
+        onLocationsChange(readLocalCommercialLocations());
+      }
+    );
+  } catch (e) {
+    console.warn('subscribeToCommercialLocations error:', e);
+  }
+
+  const handleLocalEvent = () => {
+    onLocationsChange(readLocalCommercialLocations());
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener(COMMERCIAL_LOCATIONS_EVENT, handleLocalEvent);
+  }
+
+  return () => {
+    unsubFirestore();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener(COMMERCIAL_LOCATIONS_EVENT, handleLocalEvent);
+    }
+  };
+}
+
+export async function saveCommercialLocation(locationData) {
+  const entry = normalizeCommercialLocation(locationData);
+  if (!entry.name) return null;
+
+  try {
+    await setDoc(doc(db, 'commercialLocations', entry.id), entry, { merge: true });
+  } catch (e) {
+    console.warn('Cloud save commercialLocation fallback to local:', e?.message || e);
+  }
+
+  const existing = readLocalCommercialLocations();
+  const idx = existing.findIndex((x) => x.id === entry.id);
+  const nextList = idx >= 0
+    ? existing.map((x, i) => (i === idx ? entry : x))
+    : [entry, ...existing];
+  writeLocalCommercialLocations(nextList);
+  return entry;
+}
+
+export async function deleteCommercialLocation(locationId) {
+  if (!locationId) return false;
+  try {
+    await deleteDoc(doc(db, 'commercialLocations', locationId));
+  } catch (e) {
+    console.warn('Cloud delete commercialLocation fallback to local:', e?.message || e);
+  }
+
+  const existing = readLocalCommercialLocations();
+  const nextList = existing.filter((x) => x.id !== locationId);
+  writeLocalCommercialLocations(nextList);
   return true;
 }
