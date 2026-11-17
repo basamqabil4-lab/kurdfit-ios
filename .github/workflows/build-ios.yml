@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-ios:
     name: Compile Kurd Fit iOS (.ipa) on macOS
@@ -56,3 +59,16 @@ jobs:
           path: |
             BQ-GYM-iOS.ipa
             KurdFit-iOS.ipa
+
+      - name: Publish BQ-GYM-iOS.ipa to Public GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="latest-ios"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" BQ-GYM-iOS.ipa KurdFit-iOS.ipa --clobber
+          else
+            gh release create "$TAG" BQ-GYM-iOS.ipa KurdFit-iOS.ipa \
+              --title "BQ GYM iOS Latest IPA" \
+              --notes "Automated iOS build (${{ github.sha }})"
+          fi
