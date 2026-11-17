@@ -25,7 +25,7 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-title" content="BQ GYM" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#030014" />
-        <meta httpEquiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http: capacitor:; img-src 'self' data: blob: https: http: capacitor:; media-src 'self' data: blob: https: http: capacitor:; font-src 'self' https: http: data: capacitor:; connect-src 'self' https: http: data: blob: capacitor: wss:;" />
+        <meta httpEquiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http: capacitor:; frame-src 'self' https: http: data: blob: capacitor:; img-src 'self' data: blob: https: http: capacitor:; media-src 'self' data: blob: https: http: capacitor:; font-src 'self' https: http: data: capacitor:; connect-src 'self' https: http: data: blob: capacitor: wss:;" />
       </head>
       <body>
         {children}

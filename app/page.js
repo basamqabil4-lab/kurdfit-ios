@@ -8,6 +8,7 @@ const CameraScanner = dynamic(() => import('./components/CameraScanner'), { ssr:
 const PhysiqueScannerModal = dynamic(() => import('./components/PhysiqueScannerModal'), { ssr: false });
 const AdminDashboardModal = dynamic(() => import('./components/AdminDashboardModal'), { ssr: false });
 const AccountAuthModal = dynamic(() => import('./components/AccountAuthModal'), { ssr: false });
+const YouTubeMediaPlayer = dynamic(() => import('./components/YouTubeMediaPlayer'), { ssr: false });
 import ExerciseThumbnail from './components/ExerciseThumbnail';
 import { cacheWorkoutPlanMedia, getExerciseMediaUrl } from './utils/exerciseMedia';
 import { safeStorage } from './utils/safeStorage';
@@ -443,6 +444,7 @@ export default function App() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [showNewCourseModal, setShowNewCourseModal] = useState(false);
   const [showAiFoodModal, setShowAiFoodModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -2312,6 +2314,7 @@ export default function App() {
     showAuthModal ||
     showGoalModal ||
     showNotificationsModal ||
+    showYouTubeModal ||
     showNewCourseModal ||
     showAiFoodModal ||
     showSettingsModal ||
@@ -2348,6 +2351,7 @@ export default function App() {
       if (showAuthModal) { setShowAuthModal(false); return; }
       if (showGoalModal) { setShowGoalModal(false); return; }
       if (showNotificationsModal) { setShowNotificationsModal(false); return; }
+      if (showYouTubeModal) { setShowYouTubeModal(false); return; }
       if (showNewCourseModal) { setShowNewCourseModal(false); return; }
       if (showAiFoodModal) { setShowAiFoodModal(false); return; }
       if (showSettingsModal) { setShowSettingsModal(false); return; }
@@ -2364,7 +2368,7 @@ export default function App() {
   }, [
     isAnyModalOpen, activeTab, activeFormExercise, selectedFoodForPortion,
     showScanModal, showEditProfileModal, showAuthModal, showGoalModal,
-    showNotificationsModal, showNewCourseModal, showAiFoodModal,
+    showNotificationsModal, showYouTubeModal, showNewCourseModal, showAiFoodModal,
     showSettingsModal, showAiDietModal, showHomeMealsModal,
     showNutritionHistoryModal, showLogoutConfirmModal, showResetModal,
     exerciseToSwapConfirm, exerciseSwapModalData, showSupplementsModal,
@@ -5722,6 +5726,31 @@ Rules:
             </div>
             
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowYouTubeModal(true)}
+                className="liquid-pill"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  padding: 0,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(239, 68, 68, 0.14)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  color: '#ef4444',
+                  transition: 'all 0.25s ease'
+                }}
+                title={currentLangConfig.code === 'en' ? 'YouTube Player' : 'پەخشکەری یوتیوب'}
+                aria-label="YouTube Player"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+              </button>
+
               {/* دوگمەی دارک مۆد / لایت مۆد - ڕۆژ و مانگ بەپێی دۆخەکە بە گۆڕینی ڕاستەوخۆ */}
               <button 
                 type="button"
@@ -7932,6 +7961,58 @@ Rules:
                   <span style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', textAlign: 'center' }}>
                     {currentLangConfig.code === 'en' ? 'Reminders' : currentLangConfig.code === 'ar' ? 'التنبيهات' : currentLangConfig.code === 'fa' ? 'یادآورها' : 'ئاگادارکردنەوە'}
                   </span>
+                </button>
+
+                {/* دوگمەی پەخشکەری یوتیوب و مۆسیقای جیم (YouTube Gym Player) */}
+                <button
+                  type="button"
+                  onClick={() => setShowYouTubeModal(true)}
+                  className="liquid-pill"
+                  style={{
+                    gridColumn: '1 / -1',
+                    padding: '18px 20px',
+                    borderRadius: '22px',
+                    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.14) 0%, rgba(220, 38, 38, 0.08) 100%)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '14px',
+                    boxShadow: '0 8px 25px rgba(239, 68, 68, 0.14)',
+                    transition: 'all 0.25s ease',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                    <div style={{
+                      width: '50px',
+                      height: '50px',
+                      borderRadius: '16px',
+                      background: 'linear-gradient(135deg, #FF0000 0%, #DC2626 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      flexShrink: 0,
+                      boxShadow: '0 6px 18px rgba(239, 68, 68, 0.4)'
+                    }}>
+                      <svg viewBox="0 0 24 24" width="26" height="26" fill="#ffffff">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                      </svg>
+                    </div>
+                    <div style={{ textAlign: isRtl ? 'right' : 'left', minWidth: 0 }}>
+                      <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--text-main)' }}>
+                        {currentLangConfig.code === 'en' ? 'YouTube Gym Player' : currentLangConfig.code === 'ar' ? 'مشغّل يوتيوب للتمارين' : currentLangConfig.code === 'fa' ? 'پخش‌کننده یوتیوب' : 'یوتیوب و میوزیکی ڕاهێنان'}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {currentLangConfig.code === 'en' ? 'Play videos & workout mixes inside the app' : currentLangConfig.code === 'ar' ? 'تشغيل الفيديو والموسيقى باستمرار داخل التطبيق' : currentLangConfig.code === 'fa' ? 'پخش ویدیو و موزیک هنگام تمرین' : 'ڤیدیۆ و مۆسیقای بەردەوام لە کاتی ڕاهێنان'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.16)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Play size={15} />
+                  </div>
                 </button>
               </div>
             </div>
@@ -14089,6 +14170,15 @@ Rules:
       <AdminDashboardModal
         isOpen={showAdminModal}
         onClose={() => setShowAdminModal(false)}
+      />
+
+      {/* ==================== پەخشکەری بەردەوامی یوتیوب و مینی پلەیەری سەر شاشە ==================== */}
+      <YouTubeMediaPlayer
+        isExpanded={showYouTubeModal}
+        onExpand={() => setShowYouTubeModal(true)}
+        onMinimize={() => setShowYouTubeModal(false)}
+        onCloseAll={() => setShowYouTubeModal(false)}
+        currentLangConfig={currentLangConfig}
       />
 
       {/* ==================== هێڵی خوارەوە (Luminous Purple-Blue Liquid Glass Bottom Bar) ==================== */}
