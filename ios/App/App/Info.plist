@@ -72,9 +72,5 @@
 	<string>Kurd Fit پێویستی بە مۆڵەتە بۆ پاشەکەوتکردنی وێنە و خشتەی ڕاهێنانەکان.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Kurd Fit پێویستی بە مایکرۆفۆنە بۆ تایبەتمەندی دەنگی ڕاهێنەری زیرەک.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
 </dict>
 </plist>
